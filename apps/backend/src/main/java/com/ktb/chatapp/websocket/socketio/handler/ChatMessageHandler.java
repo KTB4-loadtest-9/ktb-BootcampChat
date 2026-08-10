@@ -17,7 +17,6 @@ import com.ktb.chatapp.util.BannedWordChecker;
 import com.ktb.chatapp.websocket.socketio.ai.AiService;
 import com.ktb.chatapp.service.RoomActivityNotifier;
 import com.ktb.chatapp.service.SessionService;
-import com.ktb.chatapp.service.SessionValidationResult;
 import com.ktb.chatapp.service.RateLimitService;
 import com.ktb.chatapp.service.RateLimitCheckResult;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
@@ -77,9 +76,7 @@ public class ChatMessageHandler {
             return;
         }
 
-        SessionValidationResult validation =
-                sessionService.validateSession(socketUser.id(), socketUser.authSessionId());
-        if (!validation.isValid()) {
+        if (!sessionService.touchSessionIfDue(socketUser.id(), socketUser.authSessionId())) {
             recordError("session_expired");
             client.sendEvent(ERROR, Map.of(
                     "code", "SESSION_EXPIRED",
@@ -172,8 +169,6 @@ public class ChatMessageHandler {
 
             // AI 멘션 처리
             aiService.handleAIMentions(roomId, socketUser.id(), messageContent);
-
-            sessionService.updateLastActivity(socketUser.id());
 
             // Record success metrics
             recordMessageSuccess(messageType);

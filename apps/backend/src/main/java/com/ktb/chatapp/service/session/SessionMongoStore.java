@@ -2,8 +2,11 @@ package com.ktb.chatapp.service.session;
 
 import com.ktb.chatapp.model.Session;
 import com.ktb.chatapp.repository.SessionRepository;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -11,6 +14,7 @@ import org.springframework.stereotype.Component;
  * Uses SessionRepository for persistence.
  */
 @Component
+@ConditionalOnProperty(name = "app.session.store", havingValue = "mongo")
 @RequiredArgsConstructor
 public class SessionMongoStore implements SessionStore {
     
@@ -37,5 +41,17 @@ public class SessionMongoStore implements SessionStore {
     @Override
     public void deleteAll(String userId) {
         sessionRepository.deleteByUserId(userId);
+    }
+
+    @Override
+    public boolean touch(String userId, String sessionId, long lastActivity, Duration ttl) {
+        Session session = sessionRepository.findByUserId(userId).orElse(null);
+        if (session == null || !sessionId.equals(session.getSessionId())) {
+            return false;
+        }
+        session.setLastActivity(lastActivity);
+        session.setExpiresAt(Instant.now().plus(ttl));
+        sessionRepository.save(session);
+        return true;
     }
 }
