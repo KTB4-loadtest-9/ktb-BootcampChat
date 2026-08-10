@@ -17,6 +17,7 @@ export const useChatRoomLifecycle = ({
   setConnected,
   cleanup,
   handleReactionUpdate,
+  handleSessionError,
 }) => {
   const {
     onReplace,
@@ -61,6 +62,7 @@ export const useChatRoomLifecycle = ({
     actions,
     cleanup,
     handleReactionUpdate,
+    handleSessionError,
   });
 
   const cleanupRef = useRef(cleanup);
