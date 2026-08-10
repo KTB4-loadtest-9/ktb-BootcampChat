@@ -12,6 +12,7 @@ import MessageContent from './MessageContent';
 import MessageActions from './MessageActions';
 import FileActions from './FileActions';
 import ReadStatus from './ReadStatus';
+import { handleImagePreviewError } from './fileMessageImageFallback';
 import fileService from '@/services/fileService';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -180,15 +181,7 @@ const FileMessage = ({
             onLoad={() => {
               console.debug('Image loaded successfully:', originalname);
             }}
-            onError={(e) => {
-              console.error('Image load error:', {
-                error: e.error,
-                originalname
-              });
-              e.target.onerror = null;
-              e.target.src = '/images/placeholder-image.png';
-              setError('이미지를 불러올 수 없습니다.');
-            }}
+            onError={handleImagePreviewError}
             loading="lazy"
             data-testid="file-image-preview"
           />
