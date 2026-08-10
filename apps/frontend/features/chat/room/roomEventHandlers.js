@@ -130,11 +130,11 @@ export const createRoomEventHandlers = ({
     },
     onError: (error) => {
       if (!mountedRef.current) return;
-      console.error('Socket error:', error);
       if (error?.code === 'MESSAGE_REJECTED') {
         showRejectedMessage(error.message || '금칙어가 포함되어 메시지를 전송할 수 없습니다.');
         return;
       }
+      console.error('Socket error:', error);
       setError(error.message || '채팅 연결에 문제가 발생했습니다.');
     },
   };

@@ -16,8 +16,9 @@ export const useRoomHandling = ({
   actions,
   cleanup,
   handleReactionUpdate,
+  handleSessionError,
 }) => {
-  const { onReplace, asPath } = route;
+  const { onReplace } = route;
   const { currentUser } = state;
   const {
     socketRef,
@@ -40,7 +41,7 @@ export const useRoomHandling = ({
     setupSucceeded,
     setupFailed,
   } = actions;
-  const { user, refreshToken, logout } = useAuth();
+  const { user, logout } = useAuth();
   const setupPromiseRef = useRef(null);
   const roomEventsUnsubscribeRef = useRef(null);
   const MAX_SOCKET_RECONNECT_ATTEMPTS = 3;
@@ -114,25 +115,6 @@ export const useRoomHandling = ({
     onReplace,
   ]);
 
-  const handleSessionError = useCallback(async () => {
-    try {
-      if (!user) {
-        throw new Error('No user session found');
-      }
-
-      await refreshToken();
-      if (mountedRef.current) {
-        return true;
-      }
-    } catch (error) {}
-
-    if (mountedRef.current) {
-      await logout();
-      onReplace('/?redirect=' + asPath);
-    }
-    return false;
-  }, [user, refreshToken, mountedRef, logout, onReplace, asPath]);
-
   const setupSocket = useCallback(async () => {
     try {
       if (!user?.token || !user?.sessionId) {
@@ -192,42 +174,45 @@ export const useRoomHandling = ({
 
   const fetchRoomData = useCallback(
     async (roomId) => {
+      if (!user?.token || !user?.sessionId) {
+        await handleSessionError();
+        throw new Error('인증 정보가 유효하지 않습니다.');
+      }
+
+      if (!roomId || !mountedRef.current) {
+        throw new Error('채팅방 정보가 올바르지 않습니다.');
+      }
+
+      const requestRoom = (session) => api.get(`/api/rooms/${roomId}`, {
+        handleAuthError: false,
+        headers: getAuthHeaders(session),
+      });
+
+      let response;
       try {
-        if (!user?.token || !user?.sessionId) {
-          await handleSessionError();
-          throw new Error('인증 정보가 유효하지 않습니다.');
-        }
-
-        if (!roomId || !mountedRef.current) {
-          throw new Error('채팅방 정보가 올바르지 않습니다.');
-        }
-
-        let response;
-        try {
-          response = await api.get(`/api/rooms/${roomId}`, {
-            handleAuthError: false,
-            headers: getAuthHeaders(user),
-          });
-        } catch (error) {
-          if (error.response?.status === 401) {
-            const refreshed = await handleSessionError();
-            if (refreshed && mountedRef.current) {
-              return fetchRoomData(roomId);
-            }
-            throw new Error('인증이 만료되었습니다.');
-          }
+        response = await requestRoom(user);
+      } catch (error) {
+        if (error.response?.status !== 401) {
           throw error;
         }
 
-        const data = response.data;
-        if (!data.success || !data.data) {
-          throw new Error('채팅방 데이터가 올바르지 않습니다.');
+        const refreshedToken = await handleSessionError();
+        if (!refreshedToken || !mountedRef.current) {
+          throw new Error('인증이 만료되었습니다.');
         }
 
-        return data.data;
-      } catch (error) {
-        throw error;
+        response = await requestRoom({
+          ...user,
+          token: refreshedToken,
+        });
       }
+
+      const data = response.data;
+      if (!data.success || !data.data) {
+        throw new Error('채팅방 데이터가 올바르지 않습니다.');
+      }
+
+      return data.data;
     },
     [user, mountedRef, handleSessionError]
   );
