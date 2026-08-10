@@ -1,6 +1,7 @@
 package com.ktb.chatapp.service;
 
 import com.ktb.chatapp.config.MongoTestContainer;
+import com.ktb.chatapp.config.RedisTestContainer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,9 +19,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * 백엔드 저장소(Redis/MongoDB)가 변경되어도 테스트 코드 수정이 불필요
  */
 @SpringBootTest
-@Import(MongoTestContainer.class)
+@Import({MongoTestContainer.class, RedisTestContainer.class})
 @TestPropertySource(properties = {
-    "socketio.enabled=false"
+    "socketio.enabled=false",
+    "app.session.store=redis"
 })
 @DisplayName("SessionService 통합 테스트")
 class SessionServiceTest {
