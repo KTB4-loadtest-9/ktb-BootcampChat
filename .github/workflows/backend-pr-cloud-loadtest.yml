@@ -224,6 +224,7 @@ jobs:
           test -d e2e/artillery
           test ! -L e2e
           test ! -L e2e/artillery
+          test ! -L e2e/artillery/artillery-config.ci.yaml
           install -m 0644 \
             trusted-ci/e2e/artillery/artillery-config.ci.yaml \
             e2e/artillery/artillery-config.ci.yaml
