@@ -102,6 +102,7 @@ CloudFront Signed URL 전용 동작으로 구성하며 공개 이미지 경로�
 | `ENCRYPTION_SALT` | ✅ | 없음 | 암복호화에 사용하는 솔트 값             |
 | `JWT_SECRET` | ✅ | 없음 | HMAC-SHA256 JWT 서명 비밀키      |
 | `MONGO_URI` | ✅ | 없음 | MongoDB 연결 문자열              |
+| `MONGO_MAX_POOL_SIZE` | ❌ | `120` | MongoDB Java Driver 최대 연결 풀 크기 |
 | `REDIS_HOST` | ✅ | 없음 | Redis 호스트                    |
 | `REDIS_PORT` | ✅ | 없음 | Redis 포트                      |
 | `SOCKETIO_STORE` | ❌ | `redisson` | Socket.IO 저장소 (`redisson` 또는 단일 노드용 `memory`) |
