@@ -11,6 +11,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
@@ -77,8 +78,16 @@ public class FileAccessService {
                 .orElseThrow(() -> new RuntimeException("방을 찾을 수 없습니다"));
 
         // 4. 권한 검증
-        if (!room.getParticipantIds().contains(requesterId)) {
-            log.warn("파일 접근 권한 없음: {} (사용자: {})", fileName, requesterId);
+        Set<String> participantIds = room.getParticipantIds() == null ? Set.of() : room.getParticipantIds();
+        if (!participantIds.contains(requesterId)) {
+            log.warn(
+                    "File access denied: filename={}, requesterId={}, fileId={}, messageId={}, roomId={}, participantIds={}",
+                    fileName,
+                    requesterId,
+                    fileEntity.getId(),
+                    message.getId(),
+                    message.getRoomId(),
+                    participantIds);
             throw new RuntimeException("파일에 접근할 권한이 없습니다");
         }
 
