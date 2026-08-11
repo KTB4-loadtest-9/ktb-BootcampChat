@@ -3,8 +3,6 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
 import com.corundumstudio.socketio.annotation.OnEvent;
-import com.ktb.chatapp.dto.FetchMessagesRequest;
-import com.ktb.chatapp.dto.FetchMessagesResponse;
 import com.ktb.chatapp.dto.JoinRoomSuccessResponse;
 import com.ktb.chatapp.dto.UserResponse;
 import com.ktb.chatapp.model.Message;
@@ -26,7 +24,7 @@ import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.*;
 
 /**
  * 방 입장 처리 핸들러
- * 채팅방 입장, 참가자 관리, 초기 메시지 로드 담당
+ * 채팅방 입장과 참가자 관리 담당
  */
 @Slf4j
 @Component
@@ -91,10 +89,6 @@ public class RoomJoinHandler {
 
             joinMessage = messageRepository.save(joinMessage);
 
-            // 초기 메시지 로드
-            FetchMessagesRequest req = new FetchMessagesRequest(roomId, 30, null);
-            FetchMessagesResponse messageLoadResult = messageLoader.loadMessages(req, userId);
-
             // 업데이트된 room 다시 조회하여 최신 participantIds 가져오기
             Optional<Room> roomOpt = roomRepository.findById(roomId);
             if (roomOpt.isEmpty()) {
@@ -114,8 +108,6 @@ public class RoomJoinHandler {
             JoinRoomSuccessResponse response = JoinRoomSuccessResponse.builder()
                 .roomId(roomId)
                 .participants(participants)
-                .messages(messageLoadResult.getMessages())
-                .hasMore(messageLoadResult.isHasMore())
                 .activeStreams(Collections.emptyList())
                 .build();
 
@@ -129,8 +121,7 @@ public class RoomJoinHandler {
             socketIOServer.getRoomOperations(roomId)
                 .sendEvent(PARTICIPANTS_UPDATE, participants);
 
-            log.info("User {} joined room {} successfully. Message count: {}, hasMore: {}",
-                userName, roomId, messageLoadResult.getMessages().size(), messageLoadResult.isHasMore());
+            log.info("User {} joined room {} successfully", userName, roomId);
 
         } catch (Exception e) {
             log.error("Error handling joinRoom", e);

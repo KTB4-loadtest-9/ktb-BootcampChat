@@ -235,33 +235,6 @@ export const useRoomHandling = ({
     [socketRef, mountedRef, userRooms]
   );
 
-  // 재연결 뒤 필요한 것은 방 참가 상태 복구뿐이다. socket.io 가 같은 소켓을
-  // 되살렸으므로 방 이벤트 구독도 그대로 살아 있다 — 여기서 소켓을 새로 만들면
-  // 살아 있는 연결을 버리는 셈이 된다.
-  const rejoinRoom = useCallback(async () => {
-    const socket = socketRef.current;
-    if (!roomId || !mountedRef.current || !socket?.connected) {
-      return;
-    }
-
-    const joinResult = await joinRoom(roomId);
-
-    if (Array.isArray(joinResult?.messages)) {
-      processMessages(joinResult.messages, joinResult.hasMore, true);
-    }
-
-    if (mountedRef.current) {
-      setupCompleteRef.current = true;
-    }
-  }, [
-    roomId,
-    socketRef,
-    mountedRef,
-    setupCompleteRef,
-    joinRoom,
-    processMessages,
-  ]);
-
   const loadInitialMessages = useCallback(
     async (roomId) => {
       const loadMessagesWithRetry = async (retryCount = 0) => {
@@ -310,6 +283,29 @@ export const useRoomHandling = ({
     [socketRef, attachSocket, processMessages, setupSocket]
   );
 
+  // 재연결 뒤 필요한 것은 방 참가 상태 복구와 메시지 이력 재조회다.
+  // socket.io 가 같은 소켓을 되살렸으므로 방 이벤트 구독은 그대로 살아 있다.
+  const rejoinRoom = useCallback(async () => {
+    const socket = socketRef.current;
+    if (!roomId || !mountedRef.current || !socket?.connected) {
+      return;
+    }
+
+    await joinRoom(roomId);
+    await loadInitialMessages(roomId);
+
+    if (mountedRef.current) {
+      setupCompleteRef.current = true;
+    }
+  }, [
+    roomId,
+    socketRef,
+    mountedRef,
+    setupCompleteRef,
+    joinRoom,
+    loadInitialMessages,
+  ]);
+
   const setupRoom = useCallback(async () => {
     if (setupPromiseRef.current) {
       return setupPromiseRef.current;
@@ -351,13 +347,8 @@ export const useRoomHandling = ({
 
         // 4. Join Room and Load Messages
         if (mountedRef.current && socketRef.current?.connected) {
-          const joinResult = await joinRoom(roomId);
-
-          if (Array.isArray(joinResult?.messages)) {
-            processMessages(joinResult.messages, joinResult.hasMore, true);
-          } else {
-            await loadInitialMessages(roomId);
-          }
+          await joinRoom(roomId);
+          await loadInitialMessages(roomId);
         }
 
         if (mountedRef.current) {
@@ -399,7 +390,6 @@ export const useRoomHandling = ({
     fetchRoomData,
     joinRoom,
     loadInitialMessages,
-    processMessages,
     cleanup,
     setupEventListeners,
     setupStarted,
