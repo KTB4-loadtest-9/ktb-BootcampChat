@@ -43,6 +43,12 @@ public class SocketIOConfig {
     @Value("${socketio.server.origin:*}")
     private String origin;
 
+    @Value("${socketio.server.boss-threads:0}")
+    private int bossThreads;
+
+    @Value("${socketio.server.worker-threads:0}")
+    private int workerThreads;
+
     @Bean(destroyMethod = "shutdown")
     @ConditionalOnProperty(name = "socketio.store", havingValue = "redisson", matchIfMissing = true)
     public RedissonClient socketIORedissonClient(
@@ -78,6 +84,8 @@ public class SocketIOConfig {
         com.corundumstudio.socketio.Configuration config = new com.corundumstudio.socketio.Configuration();
         config.setHostname(host);
         config.setPort(port);
+        config.setBossThreads(bossThreads);
+        config.setWorkerThreads(workerThreads);
         
         var socketConfig = new SocketConfig();
         socketConfig.setReuseAddress(true);
