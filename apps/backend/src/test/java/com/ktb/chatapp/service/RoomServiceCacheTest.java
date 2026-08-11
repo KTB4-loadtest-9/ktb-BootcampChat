@@ -2,6 +2,7 @@ package com.ktb.chatapp.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -144,7 +145,8 @@ class RoomServiceCacheTest {
         when(roomRepository.findById(room.getId())).thenReturn(Optional.of(room));
         when(userRepository.findByEmail(joiner.getEmail())).thenReturn(Optional.of(joiner));
         when(userRepository.findAllById(any())).thenReturn(List.of(creator, joiner));
-        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doAnswer(invocation -> room.getParticipantIds().add(joiner.getId()))
+            .when(roomRepository).addParticipant(room.getId(), joiner.getId());
 
         roomService.getAllRooms("viewer@example.com", 0, 10);
         roomService.joinRoom(room.getId(), null, joiner.getEmail());
@@ -176,6 +178,8 @@ class RoomServiceCacheTest {
             return savedRoom;
         });
         when(roomRepository.findById(room.getId())).thenReturn(Optional.of(room));
+        doAnswer(invocation -> room.getParticipantIds().add(joiner.getId()))
+            .when(roomRepository).addParticipant(room.getId(), joiner.getId());
 
         roomService.getAllRooms("viewer@example.com", 0, 10);
         roomService.createRoomResponse(CreateRoomRequest.builder().name("new room").build(), creator.getEmail());

@@ -77,6 +77,24 @@ class RoomJoinHandlerTest {
     }
 
     @Test
+    void handleJoinRoom_alreadyInSocketRoom_repairsPersistedMembership() {
+        SocketUser socketUser = new SocketUser("user-1", "tester", "session-1", "socket-1");
+        User user = User.builder().id("user-1").name("tester").email("tester@example.com").build();
+        Room room = Room.builder().id("room-1").name("room").participantIds(Set.of()).build();
+        when(client.get("user")).thenReturn(socketUser);
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+        when(roomRepository.findById("room-1")).thenReturn(Optional.of(room));
+        when(userRooms.isInRoom("user-1", "room-1")).thenReturn(true);
+
+        handler.handleJoinRoom(client, "room-1");
+
+        verify(roomRepository).addParticipant("room-1", "user-1");
+        verify(client).joinRoom("room-1");
+        verify(client).sendEvent(eq(JOIN_ROOM_SUCCESS), any());
+        verifyNoInteractions(messageRepository);
+    }
+
+    @Test
     void handleJoinRoom_addsParticipantWithoutLoadingMessagesAndBroadcasts() {
         SocketUser socketUser = new SocketUser("user-1", "tester", "session-1", "socket-1");
         User user = User.builder().id("user-1").name("tester").email("tester@example.com").build();
@@ -134,6 +152,8 @@ class RoomJoinHandlerTest {
         verify(userRepository).findById("user-1");
         verify(roomRepository).findAllById(any());
         verify(roomRepository, never()).findById(any());
+        verify(roomRepository).addParticipant("room-1", "user-1");
+        verify(roomRepository).addParticipant("room-2", "user-1");
         verify(client).joinRoom("room-1");
         verify(client).joinRoom("room-2");
         verify(client, times(2)).sendEvent(eq(JOIN_ROOM_SUCCESS), any());
