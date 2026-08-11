@@ -81,7 +81,7 @@ class MessageLoaderTest {
         
         lenient().when(userRepository.findAllById(anySet()))
                 .thenReturn(List.of(testUser));
-        lenient().doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString());
+        lenient().doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString(), anyString());
     }
     
     private Message createMessage(String id, LocalDateTime timestamp) {

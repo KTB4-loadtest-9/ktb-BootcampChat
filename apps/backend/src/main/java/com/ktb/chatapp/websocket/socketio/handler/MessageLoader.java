@@ -69,7 +69,7 @@ public class MessageLoader {
         List<Message> sortedMessages = messages.reversed();
         
         var messageIds = sortedMessages.stream().map(Message::getId).toList();
-        messageReadStatusService.updateReadStatus(messageIds, userId);
+        messageReadStatusService.updateReadStatus(messageIds, userId, roomId);
 
         Set<String> fileIds = sortedMessages.stream()
                 .map(Message::getFileId)
