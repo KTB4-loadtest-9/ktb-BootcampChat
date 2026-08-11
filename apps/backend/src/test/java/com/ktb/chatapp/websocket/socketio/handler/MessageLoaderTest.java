@@ -81,7 +81,7 @@ class MessageLoaderTest {
         
         lenient().when(userRepository.findAllById(anySet()))
                 .thenReturn(List.of(testUser));
-        lenient().doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString());
+        lenient().doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString(), anyString());
     }
     
     private Message createMessage(String id, LocalDateTime timestamp) {
@@ -153,6 +153,32 @@ class MessageLoaderTest {
         // 시간순 정렬 확인 (오름차순: 오래된 것 → 최신 것)
         // [30시간 전, 29시간 전, ..., 1시간 전]
         verifyAscending(result);
+    }
+
+    @Test
+    @DisplayName("loadMessages: 파일 정보는 메시지별 조회 없이 batch 조회")
+    void loadMessages_shouldBatchLoadFiles() {
+        Message firstMessage = createMessage("message-1", LocalDateTime.now().minusMinutes(2));
+        firstMessage.setFileId("file-1");
+        Message secondMessage = createMessage("message-2", LocalDateTime.now().minusMinutes(1));
+        secondMessage.setFileId("file-2");
+
+        Pageable pageable = PageRequest.of(0, 30, Sort.by("timestamp").descending());
+        when(messageRepository.findByRoomIdAndTimestampBefore(
+                eq(roomId), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(secondMessage, firstMessage), pageable, 2));
+        when(fileRepository.findAllById(any())).thenReturn(List.of(
+                com.ktb.chatapp.model.File.builder().id("file-1").filename("one.txt").build(),
+                com.ktb.chatapp.model.File.builder().id("file-2").filename("two.txt").build()));
+
+        FetchMessagesResponse result = messageLoader.loadMessages(
+                new FetchMessagesRequest(roomId, 30, null), userId);
+
+        assertThat(result.getMessages())
+                .extracting(response -> response.getFile().getId())
+                .containsExactly("file-1", "file-2");
+        verify(fileRepository).findAllById(any());
+        verify(fileRepository, never()).findById(anyString());
     }
     
     private static void verifyAscending(FetchMessagesResponse result) {

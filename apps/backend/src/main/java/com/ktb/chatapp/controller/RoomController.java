@@ -20,9 +20,13 @@ import jakarta.validation.Valid;
 import java.security.Principal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -160,8 +164,7 @@ public class RoomController {
                 );
             }
 
-            Room savedRoom = roomService.createRoom(createRoomRequest, principal.getName());
-            RoomResponse roomResponse = mapToRoomResponse(savedRoom, principal.getName());
+            RoomResponse roomResponse = roomService.createRoomResponse(createRoomRequest, principal.getName());
 
             return ResponseEntity.status(201).body(
                 Map.of(
@@ -244,14 +247,12 @@ public class RoomController {
             @RequestBody JoinRoomRequest joinRoomRequest,
             Principal principal) {
         try {
-            Room joinedRoom = roomService.joinRoom(roomId, joinRoomRequest.getPassword(), principal.getName());
+            RoomResponse roomResponse = roomService.joinRoomResponse(roomId, joinRoomRequest.getPassword(), principal.getName());
 
-            if (joinedRoom == null) {
+            if (roomResponse == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(StandardResponse.error("채팅방을 찾을 수 없습니다."));
             }
-
-            RoomResponse roomResponse = mapToRoomResponse(joinedRoom, principal.getName());
             
             return ResponseEntity.ok(
                 Map.of(
@@ -277,20 +278,29 @@ public class RoomController {
     }
 
     private RoomResponse mapToRoomResponse(Room room, String name) {
-        User creator = userRepository.findById(room.getCreator()).orElse(null);
+        Set<String> participantIds = room.getParticipantIds() == null
+                ? Set.of()
+                : room.getParticipantIds();
+        Set<String> userIds = new HashSet<>(participantIds);
+        if (room.getCreator() != null) {
+            userIds.add(room.getCreator());
+        }
+        Map<String, User> usersById = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+
+        User creator = usersById.get(room.getCreator());
         if (creator == null) {
             throw new RuntimeException("Creator not found for room " + room.getId());
         }
         UserResponse creatorSummary = UserResponse.from(creator);
-        List<UserResponse> participantSummaries = room.getParticipantIds()
+        List<UserResponse> participantSummaries = participantIds
                 .stream()
-                .map(userRepository::findById).peek(optUser -> {
-                    if (optUser.isEmpty()) {
-                        log.warn("Participant not found: roomId={}, userId={}", room.getId(), optUser);
+                .map(usersById::get).peek(user -> {
+                    if (user == null) {
+                        log.warn("Participant not found: roomId={}", room.getId());
                     }
                 })
-                .filter(Optional::isPresent)
-                .map(Optional::get)
+                .filter(java.util.Objects::nonNull)
                 .map(UserResponse::from)
                 .toList();
 

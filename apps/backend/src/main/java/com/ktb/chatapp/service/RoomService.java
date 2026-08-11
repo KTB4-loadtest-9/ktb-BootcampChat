@@ -8,15 +8,21 @@ import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -42,39 +48,52 @@ public class RoomService {
         return getAllRooms(name, 0, DEFAULT_PAGE_SIZE);
     }
 
+    @Cacheable(cacheNames = "rooms", unless = "#result == null || !#result.success")
     public RoomsResponse getAllRooms(String name, int page, int pageSize) {
-        if (page < 0 || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
-            throw new IllegalArgumentException("페이지 번호 또는 페이지 크기가 올바르지 않습니다.");
-        }
 
         try {
+            int safePage = Math.max(page, 0);
+            int safeSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
             Page<Room> roomPage = roomRepository.findAll(PageRequest.of(
-                    page,
-                    pageSize,
-                    Sort.by(Sort.Direction.DESC, "createdAt")
-            ));
+                safePage,
+                safeSize,
+                Sort.by(Sort.Direction.DESC, "createdAt")
+                    .and(Sort.by(Sort.Direction.ASC, "id"))));
             List<Room> rooms = roomPage.getContent();
-            Map<String, User> usersById = findUsers(rooms);
-            List<String> roomIds = rooms.stream()
+            if (rooms.isEmpty()) {
+                return RoomsResponse.builder()
+                    .success(true)
+                    .data(List.of())
+                    .metadata(PageMetadata.builder()
+                        .total(roomPage.getTotalElements())
+                        .page(safePage)
+                        .pageSize(safeSize)
+                        .totalPages(Math.max(roomPage.getTotalPages(), 1))
+                        .hasMore(false)
+                        .currentCount(0)
+                        .build())
+                    .build();
+            }
+
+            Map<String, User> usersById = findUsersById(rooms);
+            Map<String, Integer> recentMessageCounts = recentMessageCounter.countRecentMessagesByRoomIds(
+                rooms.stream()
                     .map(Room::getId)
-                    .filter(id -> id != null)
-                    .toList();
-            Map<String, Integer> recentMessageCounts = roomIds.isEmpty()
-                    ? Map.of()
-                    : recentMessageCounter.countRecentMessagesByRoomIds(roomIds);
+                    .filter(Objects::nonNull)
+                    .toList());
 
             List<RoomResponse> roomResponses = rooms.stream()
-                    .map(room -> mapToRoomResponse(room, name, usersById, recentMessageCounts))
-                    .toList();
+                .map(room -> mapToRoomResponse(room, name, usersById, recentMessageCounts))
+                .collect(Collectors.toList());
 
             PageMetadata metadata = PageMetadata.builder()
-                    .total(roomPage.getTotalElements())
-                    .page(roomPage.getNumber())
-                    .pageSize(roomPage.getSize())
-                    .totalPages(roomPage.getTotalPages())
-                    .hasMore(roomPage.hasNext())
-                    .currentCount(roomResponses.size())
-                    .build();
+                .total(roomPage.getTotalElements())
+                .page(safePage)
+                .pageSize(safeSize)
+                .totalPages(Math.max(roomPage.getTotalPages(), 1))
+                .hasMore(roomPage.hasNext())
+                .currentCount(roomResponses.size())
+                .build();
 
             return RoomsResponse.builder()
                 .success(true)
@@ -89,27 +108,6 @@ public class RoomService {
                 .data(List.of())
                 .build();
         }
-    }
-
-    private Map<String, User> findUsers(List<Room> rooms) {
-        Set<String> userIds = new LinkedHashSet<>();
-        rooms.forEach(room -> {
-            if (room.getCreator() != null) {
-                userIds.add(room.getCreator());
-            }
-            if (room.getParticipantIds() != null) {
-                userIds.addAll(room.getParticipantIds());
-            }
-        });
-
-        if (userIds.isEmpty()) {
-            return Map.of();
-        }
-
-        Map<String, User> usersById = new HashMap<>();
-        userRepository.findAllById(userIds)
-                .forEach(user -> usersById.put(user.getId(), user));
-        return usersById;
     }
 
     public HealthResponse getHealthStatus() {
@@ -158,7 +156,17 @@ public class RoomService {
         }
     }
 
+    @CacheEvict(cacheNames = "rooms", allEntries = true)
     public Room createRoom(CreateRoomRequest createRoomRequest, String name) {
+        return createRoomOperation(createRoomRequest, name).room();
+    }
+
+    @CacheEvict(cacheNames = "rooms", allEntries = true)
+    public RoomResponse createRoomResponse(CreateRoomRequest createRoomRequest, String name) {
+        return createRoomOperation(createRoomRequest, name).response();
+    }
+
+    private RoomOperation createRoomOperation(CreateRoomRequest createRoomRequest, String name) {
         User creator = userRepository.findByEmail(name)
             .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다: " + name));
 
@@ -173,23 +181,35 @@ public class RoomService {
         }
 
         Room savedRoom = roomRepository.save(room);
-        
+
+        RoomResponse roomResponse = mapToRoomResponse(savedRoom, name);
         // Publish event for room created
         try {
-            RoomResponse roomResponse = mapToRoomResponse(savedRoom, name);
             eventPublisher.publishEvent(new RoomCreatedEvent(this, roomResponse));
         } catch (Exception e) {
             log.error("roomCreated 이벤트 발행 실패", e);
         }
-        
-        return savedRoom;
+
+        return new RoomOperation(savedRoom, roomResponse);
     }
 
     public Optional<Room> findRoomById(String roomId) {
         return roomRepository.findById(roomId);
     }
 
+    @CacheEvict(cacheNames = "rooms", allEntries = true)
     public Room joinRoom(String roomId, String password, String name) {
+        RoomOperation operation = joinRoomOperation(roomId, password, name);
+        return operation == null ? null : operation.room();
+    }
+
+    @CacheEvict(cacheNames = "rooms", allEntries = true)
+    public RoomResponse joinRoomResponse(String roomId, String password, String name) {
+        RoomOperation operation = joinRoomOperation(roomId, password, name);
+        return operation == null ? null : operation.response();
+    }
+
+    private RoomOperation joinRoomOperation(String roomId, String password, String name) {
         Optional<Room> roomOpt = roomRepository.findById(roomId);
         if (roomOpt.isEmpty()) {
             return null;
@@ -213,36 +233,26 @@ public class RoomService {
             room = roomRepository.save(room);
         }
         
+        RoomResponse roomResponse = mapToRoomResponse(room, name);
+
         // Publish event for room updated
         try {
-            RoomResponse roomResponse = mapToRoomResponse(room, name);
             eventPublisher.publishEvent(new RoomUpdatedEvent(this, roomId, roomResponse));
         } catch (Exception e) {
             log.error("roomUpdate 이벤트 발행 실패", e);
         }
 
-        return room;
+        return new RoomOperation(room, roomResponse);
     }
 
     private RoomResponse mapToRoomResponse(Room room, String name) {
         if (room == null) return null;
 
-        User creator = null;
-        if (room.getCreator() != null) {
-            creator = userRepository.findById(room.getCreator()).orElse(null);
-        }
-
-        List<User> participants = room.getParticipantIds() == null
-                ? List.of()
-                : room.getParticipantIds().stream()
-                        .map(userRepository::findById)
-                        .filter(Optional::isPresent)
-                        .map(Optional::get)
-                        .toList();
-
-        int recentMessageCount = recentMessageCounter.countRecentMessages(room.getId());
-
-        return buildRoomResponse(room, name, creator, participants, recentMessageCount);
+        Map<String, User> usersById = findUsersById(List.of(room));
+        Map<String, Integer> recentMessageCounts = room.getId() == null
+            ? Map.of()
+            : Map.of(room.getId(), recentMessageCounter.countRecentMessages(room.getId()));
+        return mapToRoomResponse(room, name, usersById, recentMessageCounts);
     }
 
     private RoomResponse mapToRoomResponse(
@@ -298,5 +308,31 @@ public class RoomService {
                 .isCreator(creator != null && creator.getId().equals(name))
                 .recentMessageCount(recentMessageCount)
                 .build();
+    }
+
+    private record RoomOperation(Room room, RoomResponse response) {
+    }
+
+    private Map<String, User> findUsersById(Collection<Room> rooms) {
+        Set<String> userIds = rooms.stream()
+            .flatMap(room -> Stream.concat(
+                Stream.of(room.getCreator()),
+                participantIds(room)))
+            .filter(Objects::nonNull)
+            .collect(Collectors.toCollection(HashSet::new));
+
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return StreamSupport.stream(userRepository.findAllById(userIds).spliterator(), false)
+            .filter(user -> user.getId() != null)
+            .collect(Collectors.toMap(User::getId, user -> user, (first, ignored) -> first));
+    }
+
+    private Stream<String> participantIds(Room room) {
+        return room.getParticipantIds() == null
+            ? Stream.empty()
+            : room.getParticipantIds().stream();
     }
 }

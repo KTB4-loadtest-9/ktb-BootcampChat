@@ -3,6 +3,8 @@ package com.ktb.chatapp.service;
 import com.ktb.chatapp.model.Session;
 import com.ktb.chatapp.service.session.SessionStore;
 import java.time.Instant;
+import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +21,8 @@ public class SessionService {
     private final SessionStore sessionStore;
     public static final long SESSION_TTL_SEC = DurationStyle.detectAndParse(SESSION_TTL).getSeconds();
     private static final long SESSION_TIMEOUT = SESSION_TTL_SEC * 1000;
+    private static final long SESSION_TOUCH_INTERVAL_MS = Duration.ofSeconds(30).toMillis();
+    private final ConcurrentHashMap<SessionTouchKey, Long> lastTouches = new ConcurrentHashMap<>();
 
     private String generateSessionId() {
         return UUID.randomUUID().toString().replace("-", "");
@@ -52,6 +56,7 @@ public class SessionService {
                     .build();
 
             session = sessionStore.save(session);
+            lastTouches.put(new SessionTouchKey(userId, sessionId), now);
             
             SessionData sessionData = toSessionData(session);
 
@@ -98,6 +103,7 @@ public class SessionService {
             session.setLastActivity(now);
             session.setExpiresAt(Instant.now().plusSeconds(SESSION_TTL_SEC));
             session = sessionStore.save(session);
+            lastTouches.put(new SessionTouchKey(userId, sessionId), now);
 
             SessionData sessionData = toSessionData(session);
             return SessionValidationResult.valid(sessionData);
@@ -130,12 +136,39 @@ public class SessionService {
         }
     }
 
+    /**
+     * Coalesces high-frequency Socket.IO activity into at most one Redis write per user
+     * per interval. A false result means the session was replaced or removed.
+     */
+    public boolean touchSessionIfDue(String userId, String sessionId) {
+        if (userId == null || sessionId == null) {
+            return false;
+        }
+        long now = Instant.now().toEpochMilli();
+        SessionTouchKey touchKey = new SessionTouchKey(userId, sessionId);
+        Long previous = lastTouches.get(touchKey);
+        if (previous != null && now - previous < SESSION_TOUCH_INTERVAL_MS) {
+            return true;
+        }
+        boolean touched = sessionStore.touch(
+                userId, sessionId, now, Duration.ofSeconds(SESSION_TTL_SEC));
+        if (touched) {
+            lastTouches.put(touchKey, now);
+        }
+        return touched;
+    }
+
     public void removeSession(String userId, String sessionId) {
         try {
             if (sessionId != null) {
                 sessionStore.delete(userId, sessionId);
             } else {
                 sessionStore.deleteAll(userId);
+            }
+            if (sessionId != null) {
+                lastTouches.remove(new SessionTouchKey(userId, sessionId));
+            } else {
+                lastTouches.keySet().removeIf(key -> key.userId().equals(userId));
             }
         } catch (Exception e) {
             log.error("Session removal error for userId: {}, sessionId: {}", userId, sessionId, e);
@@ -150,6 +183,7 @@ public class SessionService {
     public void removeAllUserSessions(String userId) {
         try {
             sessionStore.deleteAll(userId);
+            lastTouches.keySet().removeIf(key -> key.userId().equals(userId));
         } catch (Exception e) {
             log.error("Remove all sessions error for userId: {}", userId, e);
             throw new RuntimeException("모든 세션 삭제 중 오류가 발생했습니다.", e);
@@ -170,5 +204,7 @@ public class SessionService {
             return null;
         }
     }
+
+    private record SessionTouchKey(String userId, String sessionId) {}
     
 }

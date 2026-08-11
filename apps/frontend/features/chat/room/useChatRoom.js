@@ -9,7 +9,7 @@ import { useChatRoomLifecycle } from './useChatRoomLifecycle';
 import socketClient from '@/lib/socket/socketClient';
 
 export const useChatRoom = ({ roomId, onNavigate, onReplace, asPath }) => {
-  const { user: authUser } = useAuth();
+  const { user: authUser, refreshToken, logout } = useAuth();
   const {
     state,
     refs,
@@ -41,6 +41,7 @@ export const useChatRoom = ({ roomId, onNavigate, onReplace, asPath }) => {
     setMessages,
     setError,
     setLoadingMessages,
+    setCurrentUser,
     cleanupManual,
   } = actions;
 
@@ -58,6 +59,39 @@ export const useChatRoom = ({ roomId, onNavigate, onReplace, asPath }) => {
     attachSocket,
   };
 
+  const handleSessionError = useCallback(async () => {
+    try {
+      if (!authUser) {
+        throw new Error('No user session found');
+      }
+
+      const refreshedToken = await refreshToken();
+      if (!mountedRef.current) {
+        return false;
+      }
+
+      setCurrentUser({
+        ...authUser,
+        token: refreshedToken,
+      });
+      return refreshedToken;
+    } catch (error) {
+      if (mountedRef.current) {
+        await logout();
+        onReplace('/?redirect=' + asPath);
+      }
+      return false;
+    }
+  }, [
+    authUser,
+    refreshToken,
+    mountedRef,
+    setCurrentUser,
+    logout,
+    onReplace,
+    asPath,
+  ]);
+
   // Message handling hook
   const {
     filePreview,
@@ -67,7 +101,15 @@ export const useChatRoom = ({ roomId, onNavigate, onReplace, asPath }) => {
     handleMessageSubmit,
     handleLoadMore,
     removeFilePreview,
-  } = useMessageHandling(currentUser, roomId, undefined, messages, loadingMessages, setLoadingMessages, socketRef);
+  } = useMessageHandling(
+    currentUser,
+    roomId,
+    handleSessionError,
+    messages,
+    loadingMessages,
+    setLoadingMessages,
+    socketRef,
+  );
 
   // Cleanup 함수 수정
   const cleanup = useCallback((reason = 'MANUAL') => {
@@ -160,10 +202,11 @@ export const useChatRoom = ({ roomId, onNavigate, onReplace, asPath }) => {
     setConnected,
     cleanup,
     handleReactionUpdate,
+    handleSessionError,
   });
 
   // File handling hook
-  const { fileInputRef } = useFileHandling(currentUser, roomId);
+  const { fileInputRef } = useFileHandling(currentUser, roomId, handleSessionError);
 
   return {
     // State

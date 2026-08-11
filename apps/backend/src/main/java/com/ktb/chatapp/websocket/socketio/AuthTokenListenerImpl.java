@@ -52,6 +52,12 @@ public class AuthTokenListenerImpl implements AuthTokenListener {
                 return new AuthTokenResult(false, Map.of("message", "Invalid token"));
             }
 
+            String tokenSessionId = jwtService.extractSessionId(token);
+            if (!sessionId.equals(tokenSessionId)) {
+                log.warn("Socket.IO session id does not match JWT claim for user: {}", userId);
+                return new AuthTokenResult(false, Map.of("message", "Invalid session"));
+            }
+
             // Validate session using SessionService
             SessionValidationResult validationResult =
                     sessionService.validateSession(userId, sessionId);
