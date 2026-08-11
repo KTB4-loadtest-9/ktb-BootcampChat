@@ -17,7 +17,13 @@ const nextConfig = {
     '10.*.*.*',
     ...additionalDevOrigins
   ],
-  transpilePackages: ['@vapor-ui/core', '@vapor-ui/icons'],
+  transpilePackages: [
+    '@vapor-ui/core',
+    '@vapor-ui/icons',
+    'axios',
+    'react-toastify',
+    'socket.io-client'
+  ],
   turbopack: {
     root: workspaceRoot
   },
