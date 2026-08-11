@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ErrorCircleIcon, NetworkIcon, RefreshOutlineIcon } from '@vapor-ui/icons';
 import { Button, Text, Badge, Callout, Box, VStack, HStack, Spinner } from '@vapor-ui/core';
 import { useAuth } from '@/contexts/AuthContext';
@@ -33,11 +33,17 @@ export default function ChatRoomsView({ router }) {
   const currentUserKey = currentUser?.id || currentUser?._id || currentUser?.email || currentUser?.token;
 
   const {
-    connectionStatus,
-    setConnectionStatus,
+    connectionStatus: httpConnectionStatus,
+    setConnectionStatus: setHttpConnectionStatus,
     isRetrying,
     attemptConnection,
   } = useServerConnection();
+  const [socketConnectionStatus, setSocketConnectionStatus] = useState(
+    CONNECTION_STATUS.CHECKING
+  );
+  const canJoinRooms =
+    httpConnectionStatus === CONNECTION_STATUS.CONNECTED &&
+    socketConnectionStatus === CONNECTION_STATUS.CONNECTED;
 
   const {
     rooms,
@@ -45,17 +51,22 @@ export default function ChatRoomsView({ router }) {
     error,
     loading,
     refreshing,
-    joiningRoom,
+    joiningRoomId,
+    joinError,
+    clearJoinError,
+    pagination,
     fetchRooms,
     refreshRooms,
+    goToPage,
     handleJoinRoom,
   } = useRoomList({
     currentUser,
     router,
-    connectionStatus,
-    setConnectionStatus,
+    connectionStatus: httpConnectionStatus,
+    setConnectionStatus: setHttpConnectionStatus,
     isRetrying,
     attemptConnection,
+    canJoinRooms,
   });
 
   const connectionCheckTimerRef = useRef(null);
@@ -102,7 +113,7 @@ export default function ChatRoomsView({ router }) {
   }, [currentUserKey, fetchRooms]);
 
   useEffect(() => {
-    if (!currentUserKey || connectionStatus !== CONNECTION_STATUS.CHECKING) return;
+    if (!currentUserKey || httpConnectionStatus !== CONNECTION_STATUS.CHECKING) return;
 
     connectionCheckTimerRef.current = setInterval(() => {
       attemptConnection();
@@ -113,12 +124,12 @@ export default function ChatRoomsView({ router }) {
         clearInterval(connectionCheckTimerRef.current);
       }
     };
-  }, [currentUserKey, connectionStatus, attemptConnection]);
+  }, [currentUserKey, httpConnectionStatus, attemptConnection]);
 
   // 활성도 지표는 소켓 이벤트만으로 만료를 알 수 없어 주기적으로 다시 조회한다.
   // 보이지 않는 탭에서는 갱신을 멈추고, 다시 보일 때 즉시 한 번 따라잡는다.
   useEffect(() => {
-    if (!currentUserKey || connectionStatus !== CONNECTION_STATUS.CONNECTED) return;
+    if (!currentUserKey || httpConnectionStatus !== CONNECTION_STATUS.CONNECTED) return;
 
     const refreshWhenVisible = () => {
       if (document.visibilityState !== 'visible') return;
@@ -132,9 +143,14 @@ export default function ChatRoomsView({ router }) {
       clearInterval(refreshTimer);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
-  }, [currentUserKey, connectionStatus]);
+  }, [currentUserKey, httpConnectionStatus]);
 
-  useRoomsSocket({ currentUser, setConnectionStatus, setRooms });
+  useRoomsSocket({
+    currentUser,
+    setConnectionStatus: setSocketConnectionStatus,
+    setRooms,
+    onRoomsChanged: () => refreshRoomsRef.current({ silent: true }),
+  });
 
   return (
     <Box
@@ -163,10 +179,13 @@ export default function ChatRoomsView({ router }) {
           >
             <Text typography="heading3">채팅방 목록</Text>
             <HStack $css={{ gap: '$200' }}>
-              <Badge colorPalette={STATUS_CONFIG[connectionStatus]?.color || 'danger'}>
-                {STATUS_CONFIG[connectionStatus].label}
+              <Badge colorPalette={STATUS_CONFIG[httpConnectionStatus]?.color || 'danger'}>
+                서버 {STATUS_CONFIG[httpConnectionStatus].label}
               </Badge>
-              {error || connectionStatus === CONNECTION_STATUS.ERROR ? (
+              <Badge colorPalette={STATUS_CONFIG[socketConnectionStatus]?.color || 'danger'}>
+                실시간 {STATUS_CONFIG[socketConnectionStatus].label}
+              </Badge>
+              {error || httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
                 <Button
                   variant="outline"
                   size="sm"
@@ -199,7 +218,7 @@ export default function ChatRoomsView({ router }) {
           >
             <HStack $css={{ gap: '$200', alignItems: 'flex-start' }}>
               <Callout.Icon>
-                {connectionStatus === CONNECTION_STATUS.ERROR ? (
+                {httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
                   <NetworkIcon size={18} />
                 ) : (
                   <ErrorCircleIcon size={18} />
@@ -222,18 +241,72 @@ export default function ChatRoomsView({ router }) {
           </Callout.Root>
         )}
 
-        {connectionStatus === CONNECTION_STATUS.ERROR ? (
+        {httpConnectionStatus === CONNECTION_STATUS.CONNECTED &&
+          socketConnectionStatus !== CONNECTION_STATUS.CONNECTED && (
+            <Callout.Root colorPalette="warning">
+              <HStack $css={{ gap: '$200', alignItems: 'center' }}>
+                <Callout.Icon>
+                  <NetworkIcon size={18} />
+                </Callout.Icon>
+                <Text typography="body2">
+                  실시간 연결이 완료될 때까지 채팅방 입장을 잠시 기다려주세요.
+                </Text>
+              </HStack>
+            </Callout.Root>
+          )}
+
+        {httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
           <ConnectionErrorBanner message="채팅 서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요." />
         ) : loading ? (
           <Box $css={{ padding: '$400' }}>
             <LoadingIndicator text="채팅방 목록을 불러오는 중..." />
           </Box>
         ) : rooms.length > 0 ? (
-          <RoomsTable
-            rooms={rooms}
-            connectionStatus={connectionStatus}
-            onJoinRoom={handleJoinRoom}
-          />
+          <VStack $css={{ gap: '$250', width: '100%' }}>
+            <RoomsTable
+              rooms={rooms}
+              canJoinRooms={canJoinRooms}
+              joiningRoomId={joiningRoomId}
+              joinError={joinError}
+              onClearJoinError={clearJoinError}
+              onJoinRoom={handleJoinRoom}
+            />
+
+            {pagination && (
+              <HStack
+                $css={{
+                  gap: '$200',
+                  width: '100%',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                aria-label="채팅방 페이지 이동"
+              >
+                <Text typography="body2">총 {pagination.total}개</Text>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToPage(pagination.page - 1)}
+                  disabled={loading || refreshing || pagination.page <= 0}
+                  data-testid="rooms-previous-page-button"
+                >
+                  이전
+                </Button>
+                <Text typography="body2" aria-live="polite">
+                  {pagination.page + 1} / {pagination.totalPages}
+                </Text>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToPage(pagination.page + 1)}
+                  disabled={loading || refreshing || !pagination.hasMore}
+                  data-testid="rooms-next-page-button"
+                >
+                  다음
+                </Button>
+              </HStack>
+            )}
+          </VStack>
         ) : !error && (
           <VStack
             $css={{ gap: '$300', alignItems: 'center', padding: '$400' }}
@@ -243,7 +316,7 @@ export default function ChatRoomsView({ router }) {
             <Button
               colorPalette="primary"
               onClick={() => router.push('/chat/new')}
-              disabled={connectionStatus !== CONNECTION_STATUS.CONNECTED}
+              disabled={!canJoinRooms}
             >
               새 채팅방 만들기
             </Button>
