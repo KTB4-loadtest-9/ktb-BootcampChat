@@ -21,7 +21,7 @@ e2e/
 **auth.actions.js**
 ```javascript
 async function loginAction(page, credentials) {
-  await page.goto(`${BASE_URL}/`);
+  await page.goto(`${BASE_URL}/login`);
   await page.getByTestId('login-email-input').fill(credentials.email);
   await page.getByTestId('login-password-input').fill(credentials.password);
   await page.getByTestId('login-submit-button').click();

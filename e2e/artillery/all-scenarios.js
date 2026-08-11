@@ -38,11 +38,6 @@ const allScenariosFlat = [
     fullProfileUpdateScenario,
 ];
 
-const smokeScenariosFlat = [
-    loginScenario,
-    chatRoomCreationScenario,
-];
-
 
 /**
  * 통합 시나리오 순차 실행
@@ -55,11 +50,11 @@ const smokeScenariosFlat = [
  * 부하테스트 리포트에서 어느 시나리오가 실패했는지 구분할 수 없었다. 실제
  * 에러 타입/스택/재시도 동작은 그대로 두고 메시지 텍스트만 태그를 붙인다.
  */
-async function runScenarios(page, vuContext, scenarios) {
+async function allScenarios(page, vuContext) {
     const testUser = generateUserSchema();
     vuContext.vars.testUser = testUser;
 
-    for (const scenario of scenarios) {
+    for (const scenario of allScenariosFlat) {
         try {
             await scenario(page, vuContext);
         } catch (err) {
@@ -69,15 +64,6 @@ async function runScenarios(page, vuContext, scenarios) {
     }
 }
 
-async function smokeScenarios(page, vuContext) {
-    await runScenarios(page, vuContext, smokeScenariosFlat);
-}
-
-async function allScenarios(page, vuContext) {
-    await runScenarios(page, vuContext, allScenariosFlat);
-}
-
 module.exports = {
     allScenarios,
-    smokeScenarios,
 };

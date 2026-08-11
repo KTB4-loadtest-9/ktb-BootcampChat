@@ -32,7 +32,6 @@ concurrency:
 
 env:
   BUILD_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-  WORKFLOW_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
   TARGET_URL: ${{ vars.LOAD_TEST_BASE_URL || 'https://goorm-ktb-009.goorm.team' }}
   BE_DEPLOY_HOSTS: ${{ vars.BE_DEPLOY_HOSTS }}
   GRAFANA_URL: ${{ vars.GRAFANA_URL }}
@@ -197,37 +196,12 @@ jobs:
     timeout-minutes: 35
     env:
       BASE_URL: ${{ vars.LOAD_TEST_BASE_URL || 'https://goorm-ktb-009.goorm.team' }}
-      ACTION_TIMEOUT: '5000'
-      ACTION_TIMEOUT_SHORT: '2000'
-      ACTION_TIMEOUT_LONG: '15000'
-      MASS_MESSAGE_COUNT: '10'
     steps:
       - name: Check out the tested commit
         uses: actions/checkout@v7
         with:
           ref: ${{ env.BUILD_REF }}
           persist-credentials: false
-
-      - name: Check out trusted load-test configuration
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ env.WORKFLOW_REF }}
-          path: trusted-ci
-          sparse-checkout: e2e/artillery/artillery-config.ci.yaml
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-
-      - name: Install trusted load-test configuration
-        run: |
-          set -Eeuo pipefail
-          test -f trusted-ci/e2e/artillery/artillery-config.ci.yaml
-          test -d e2e/artillery
-          test ! -L e2e
-          test ! -L e2e/artillery
-          test ! -L e2e/artillery/artillery-config.ci.yaml
-          install -m 0644 \
-            trusted-ci/e2e/artillery/artillery-config.ci.yaml \
-            e2e/artillery/artillery-config.ci.yaml
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -247,7 +221,7 @@ jobs:
       - name: Check target health through the public domain
         run: curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 5 "${TARGET_URL%/}/api/health"
 
-      - name: Run staged browser load test
+      - name: Run staged browser load test with original E2E
         working-directory: e2e
         run: |
           set -Eeuo pipefail
@@ -255,10 +229,11 @@ jobs:
 
           for vus in 15 30 60; do
             echo "Starting ${vus}-VU stage against ${BASE_URL}"
-            export STAGE_VUS="$vus"
+            export PHASE1_DURATION=5
+            export PHASE1_ARRIVAL_COUNT="$vus"
             if ! pnpm exec artillery run \
               --output "../artillery-reports/artillery-${vus}-vu.json" \
-              artillery/artillery-config.ci.yaml \
+              artillery/artillery-config.yaml \
               2>&1 | tee "../artillery-reports/artillery-${vus}-vu.log"; then
               echo "${vus}-VU stage failed" >&2
               exit 1

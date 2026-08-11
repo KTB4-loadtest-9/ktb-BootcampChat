@@ -11,18 +11,12 @@
   # 환경 검증 (Node.js, pnpm, Artillery 설치 확인)
   make verify-env
 
-  # 스모크: 모니터링 연결 확인 → 회원가입/로그인 → 방 목록 → 방 생성/입장 → 메시지 조회/전송
-  make smoke
-
-  # 전체 시나리오 (1명, 5초 동안 유저 생성)
+  # 기본 부하 테스트 (1명, 5초)
   make artillery
 
   # 커스터마이징
   PHASE1_ARRIVAL_COUNT=10 PHASE1_DURATION=30 make artillery
   ```
-
-저장소 루트에서는 `pnpm run test:artillery:smoke`와 `pnpm run test:artillery`를 사용합니다.
-이 저장소의 실행 가능한 부하 테스트는 Artillery가 기준이며, 연결되지 않은 k6 스크립트는 포함하지 않습니다.
 
 ## 환경 변수
 
@@ -36,11 +30,6 @@
       **`http://localhost:3000`**을 쓰세요. Next.js 개발 서버는 cross-site 요청 방지 기능(`allowedDevOrigins`)
       때문에 `localhost`만 기본 허용하고 `127.0.0.1`은 허용하지 않아서, 첫 페이지는 뜨지만 이후 스크립트/데이터
       요청이 막혀 로그인 폼이 채워지지 않는 등의 증상으로 나타납니다.
-    - 기본적으로 `localhost`와 `127.0.0.1`만 허용합니다. 승인된 원격 환경은
-      `ALLOW_REMOTE_LOAD=true`를 함께 지정해야 합니다.
-  - BACKEND_URL: Actuator 상태 확인 주소 (기본값: http://localhost:5001)
-  - PROMETHEUS_URL: Prometheus 주소 (기본값: http://localhost:9090)
-  - GRAFANA_URL: Grafana 주소 (기본값: http://localhost:9091)
 
   부하 설정
 
@@ -68,8 +57,8 @@
   # 10명의 유저로 60초간 테스트
   PHASE1_ARRIVAL_COUNT=10 PHASE1_DURATION=60 make artillery
 
-  # 승인된 다른 서버로 테스트
-  ALLOW_REMOTE_LOAD=true BASE_URL=https://example.com PHASE1_ARRIVAL_COUNT=5 make artillery
+  # 다른 서버로 테스트
+  BASE_URL=https://example.com PHASE1_ARRIVAL_COUNT=5 make artillery
 
   # 대량 메시지 100개로 테스트
   MASS_MESSAGE_COUNT=100 PHASE1_ARRIVAL_COUNT=3 make artillery
@@ -80,23 +69,6 @@
   # 커스텀 금칙어로 테스트
   FORBIDDEN_WORDS="word1,word2,word3" make artillery
   ```
-
-## 결과와 비교 조건
-
-`make smoke`는 `/tmp/ktb-artillery-smoke.json`, `make artillery`는
-`/tmp/ktb-artillery-full.json`에 원본 JSON을 남깁니다. 출력에는 현재 commit SHA, 대상 URL,
-가상 사용자 수, 유저 생성 구간, 결과 파일이 함께 표시됩니다.
-
-~~~bash
-SMOKE_REPORT=/tmp/baseline.json make smoke
-# 코드를 변경한 뒤 같은 BASE_URL, PHASE1_DURATION, PHASE1_ARRIVAL_COUNT로 실행
-SMOKE_REPORT=/tmp/optimized.json make smoke
-~~~
-
-비교할 때는 commit SHA와 위 조건뿐 아니라 MongoDB 초기 데이터 상태도 함께 기록합니다.
-성공 기준은 `vusers.failed=0`이며, 브라우저 TTFB/LCP와 세션 길이의 p50·p95·p99를 비교합니다.
-서버 측 HTTP·MongoDB·Redis 지표는 Grafana의 `KTB Chat Load Overview`, Socket.IO 지표는
-Grafana Explore에서 같은 시간 범위로 확인합니다.
 
 ## 디렉토리 구조
 

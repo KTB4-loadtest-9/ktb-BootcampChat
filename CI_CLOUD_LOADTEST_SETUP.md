@@ -63,11 +63,10 @@ FE, Redis, DB, Monitoring EC2는 이 변수에 넣지 않습니다.
 
 ## 2. 저장소 파일 적용
 
-다음 세 파일을 반드시 같은 commit으로 전달합니다.
+Workflow는 대회 측 원본 E2E 설정을 직접 실행하므로 다음 파일을 전달합니다.
 
 ```text
 .github/workflows/backend-pr-cloud-loadtest.yml
-e2e/artillery/artillery-config.ci.yaml
 CI_CLOUD_LOADTEST_SETUP.md
 ```
 
@@ -84,17 +83,15 @@ git switch -c codex/backend-pr-cloud-loadtest-ci
 
 ```bash
 test -f .github/workflows/backend-pr-cloud-loadtest.yml
-test -f e2e/artillery/artillery-config.ci.yaml
 test -f CI_CLOUD_LOADTEST_SETUP.md
 git diff --check
 ```
 
-관계없는 로컬 파일을 포함하지 않도록 세 파일만 Stage합니다.
+관계없는 로컬 파일을 포함하지 않도록 두 파일만 Stage합니다.
 
 ```bash
 git add \
   .github/workflows/backend-pr-cloud-loadtest.yml \
-  e2e/artillery/artillery-config.ci.yaml \
   CI_CLOUD_LOADTEST_SETUP.md
 
 git diff --cached --check

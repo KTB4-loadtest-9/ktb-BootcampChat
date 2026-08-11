@@ -14,9 +14,5 @@ config:
         viewport: null
 
 scenarios:
-  - name: smoke
-    engine: playwright
-    flowFunction: smokeScenarios
-  - name: full
-    engine: playwright
+  - engine: playwright
     flowFunction: allScenarios
