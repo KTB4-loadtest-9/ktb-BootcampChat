@@ -13,11 +13,7 @@ import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.MessageReadStatusService;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -53,25 +49,9 @@ public class MessageReadHandler {
             if (data == null || data.getMessageIds() == null || data.getMessageIds().isEmpty()) {
                 return;
             }
-
-            List<String> messageIds = data.getMessageIds().stream()
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .toList();
-            if (messageIds.isEmpty()) {
-                return;
-            }
-
-            var messagesById = messageRepository.findAllById(messageIds).stream()
-                    .filter(message -> message.getId() != null)
-                    .collect(Collectors.toMap(Message::getId, Function.identity(), (first, ignored) -> first));
-
-            Message firstMessage = messageIds.stream()
-                    .map(messagesById::get)
-                    .filter(Objects::nonNull)
-                    .findFirst()
-                    .orElse(null);
-            String roomId = firstMessage != null ? firstMessage.getRoomId() : null;
+            
+            String roomId = messageRepository.findById(data.getMessageIds().getFirst())
+                    .map(Message::getRoomId).orElse(null);
             
             if (roomId == null || roomId.isBlank()) {
                 client.sendEvent(ERROR, Map.of("message", "Invalid room"));
@@ -89,20 +69,10 @@ public class MessageReadHandler {
                 client.sendEvent(ERROR, Map.of("message", "Room access denied"));
                 return;
             }
+            
+            messageReadStatusService.updateReadStatus(data.getMessageIds(), userId);
 
-            List<String> roomMessageIds = messageIds.stream()
-                    .map(messagesById::get)
-                    .filter(Objects::nonNull)
-                    .filter(message -> roomId.equals(message.getRoomId()))
-                    .map(Message::getId)
-                    .toList();
-            if (roomMessageIds.isEmpty()) {
-                return;
-            }
-
-            messageReadStatusService.updateReadStatus(roomMessageIds, userId, roomId);
-
-            MessagesReadResponse response = new MessagesReadResponse(userId, roomMessageIds);
+            MessagesReadResponse response = new MessagesReadResponse(userId, data.getMessageIds());
 
             // Broadcast to room
             socketIOServer.getRoomOperations(roomId)

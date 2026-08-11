@@ -15,6 +15,7 @@ config:
     maxErrorRate: 0
 
 scenarios:
-  - name: Full browser journey
-    engine: playwright
-    flowFunction: allScenarios
+  
+name: Full browser journey
+  engine: playwright
+  flowFunction: allScenarios

@@ -17,16 +17,18 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 업로드 디렉토리가 익명에게 노출되지 않는지 고정한다.
+ * 업로드 디렉토리의 어느 부분이 익명에게 노출되는지 고정한다.
  *
  * <p>{@link SecurityConfigTest}와 달리 실제 서빙 컨트롤러({@link ProfileImageController})와 실제
  * 스토리지({@link LocalStorage})를 슬라이스에 넣는다. 인증 필터 통과 여부만이 아니라 어떤 파일까지 실제로
  * 바이트가 나가는지가 검증 대상이기 때문이다.
  *
- * <p>프로필과 채팅 이미지 모두 서명 URL 또는 인증된 fallback 경로를 사용한다.
+ * <p>두 자산은 민감도가 다르다. 프로필 이미지는 {@code <img src>}가 인증 헤더를 실을 수 없어 익명 접근이
+ * 불가피하지만, 채팅 첨부는 {@code /api/files/view}의 방 참가자 검증을 거쳐야 한다.
  */
 @WebMvcTest(controllers = {ProfileImageController.class, UploadsResourceAccessTest.NoopController.class})
 @Import({SecurityConfig.class, WebMvcConfig.class, LocalStorage.class})
@@ -49,9 +51,10 @@ class UploadsResourceAccessTest {
     private RateLimitService rateLimitService;
 
     @Test
-    void profileImageIsNotServedToAnonymousRequests() throws Exception {
+    void profileImageIsServedToAnonymousRequests() throws Exception {
         mockMvc.perform(get("/api/files/profiles/avatar.png"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("fake-png-bytes")));
     }
 
     /**

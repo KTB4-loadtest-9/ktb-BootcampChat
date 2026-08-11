@@ -11,4 +11,4 @@ FROM eclipse-temurin:25-jre AS runtime
 WORKDIR /app
 COPY --from=builder /workspace/target/*.jar app.jar
 EXPOSE 5001 5002
-ENTRYPOINT ["java", "-Xms1280m", "-Xmx1280m", "-XX:+UseG1GC", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]

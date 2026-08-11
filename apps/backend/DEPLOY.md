@@ -226,12 +226,12 @@ chmod +x deploy.sh
 ```
 
 **JVM 옵션 커스터마이징:**
-`app-control.sh`는 호스트의 systemd 유닛을 제어하므로 `JVM_OPTS` 환경변수를
-직접 읽지 않습니다. JVM 옵션은 systemd 유닛의 `ExecStart`에 설정합니다.
+```bash
+# 힙 메모리 2GB 할당
+JVM_OPTS="-Xmx2048m -Xms1024m" ./app-control.sh start
 
-```text
-# 부하테스트 대회용 t3.small 노드 설정
--Xms1280m -Xmx1280m -XX:+UseG1GC
+# 여러 JVM 옵션 설정
+JVM_OPTS="-Xmx2048m -XX:+UseG1GC -XX:MaxGCPauseMillis=200" ./app-control.sh start
 ```
 
 **Spring Profile 설정:**
@@ -426,8 +426,9 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/ktb-chat-backend
 Environment="SPRING_PROFILE=prod"
+Environment="JVM_OPTS=-Xmx1024m -Xms512m"
 Environment="HOSTNAME=%H"
-ExecStart=/usr/bin/java -Xms1280m -Xmx1280m -XX:+UseG1GC -Dspring.profiles.active=prod -jar target/ktb-chat-backend-0.0.1-SNAPSHOT.jar
+ExecStart=/usr/bin/java -Xmx1024m -Xms512m -Dspring.profiles.active=prod -jar target/ktb-chat-backend-0.0.1-SNAPSHOT.jar
 Restart=on-failure
 RestartSec=10
 

@@ -17,13 +17,8 @@ import com.ktb.chatapp.websocket.socketio.UserRooms;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -119,8 +114,12 @@ public class RoomLeaveHandler {
             return;
         }
         
-        var participantList = userRepository.findAllById(roomOpt.get().getParticipantIds())
+        var participantList = roomOpt.get()
+                .getParticipantIds()
                 .stream()
+                .map(userRepository::findById)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
                 .map(UserResponse::from)
                 .toList();
         
@@ -130,78 +129,6 @@ public class RoomLeaveHandler {
         
         socketIOServer.getRoomOperations(roomId)
                 .sendEvent(PARTICIPANTS_UPDATE, participantList);
-    }
-
-    private void broadcastParticipantList(String roomId, Room room, Map<String, User> usersById) {
-        Set<String> participantIds = room.getParticipantIds() == null ? Set.of() : room.getParticipantIds();
-        List<UserResponse> participantList = participantIds.stream()
-                .map(usersById::get)
-                .filter(user -> user != null)
-                .map(UserResponse::from)
-                .toList();
-
-        if (participantList.isEmpty()) {
-            return;
-        }
-
-        socketIOServer.getRoomOperations(roomId)
-                .sendEvent(PARTICIPANTS_UPDATE, participantList);
-    }
-
-    /**
-     * 연결 종료 시 사용자와 방 존재 여부를 한 번에 확인한 뒤 방별 정리 작업만 수행한다.
-     */
-    public void handleDisconnectRooms(SocketIOClient client, Set<String> roomIds) {
-        if (roomIds == null || roomIds.isEmpty()) {
-            return;
-        }
-
-        String userId = getUserId(client);
-        String userName = getUserName(client);
-        if (userId == null) {
-            return;
-        }
-
-        User user = userRepository.findById(userId).orElse(null);
-        if (user == null) {
-            return;
-        }
-
-        Map<String, Room> roomsById = roomRepository.findAllById(new HashSet<>(roomIds)).stream()
-                .collect(Collectors.toMap(Room::getId, Function.identity()));
-
-        if (roomsById.isEmpty()) {
-            return;
-        }
-
-        for (Map.Entry<String, Room> entry : roomsById.entrySet()) {
-            String roomId = entry.getKey();
-            Room room = entry.getValue();
-            roomRepository.removeParticipant(roomId, userId);
-            client.leaveRoom(roomId);
-            userRooms.remove(userId, roomId);
-            log.info("User {} left room {}", userName, room.getName());
-
-            sendSystemMessage(roomId, userName + "님이 퇴장하였습니다.");
-        }
-
-        Map<String, Room> updatedRoomsById = roomRepository.findAllById(roomsById.keySet()).stream()
-                .collect(Collectors.toMap(Room::getId, Function.identity()));
-        Set<String> participantIds = updatedRoomsById.values().stream()
-                .map(room -> room.getParticipantIds() == null ? Set.<String>of() : room.getParticipantIds())
-                .flatMap(Set::stream)
-                .collect(Collectors.toSet());
-        Map<String, User> usersById = participantIds.isEmpty()
-                ? Map.of()
-                : userRepository.findAllById(participantIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity(), (first, ignored) -> first));
-
-        for (String roomId : roomsById.keySet()) {
-            Room updatedRoom = updatedRoomsById.get(roomId);
-            if (updatedRoom != null) {
-                broadcastParticipantList(roomId, updatedRoom, usersById);
-            }
-        }
     }
 
     private SocketUser getUserDto(SocketIOClient client) {

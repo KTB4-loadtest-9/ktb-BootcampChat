@@ -83,19 +83,6 @@ make verify-java
 ## 환경 변수 설정
 애플리케이션은 `.env` 혹은 호스트 환경 변수에서 설정을 읽습니다. 필수 항목을 채운 뒤 서버를 시작하세요.
 
-### S3 직접 이미지 업로드와 CloudFront
-
-기존 multipart 업로드 API는 그대로 유지됩니다. 이미지 업로드는 항상 S3 직접 업로드 경로를 사용하므로
-비공개 S3 버킷과 CloudFront OAC 배포를 준비하고 `FILE_STORAGE_TYPE=s3`, `AWS_REGION`,
-`AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DOMAIN`, `AWS_CLOUDFRONT_DISTRIBUTION_ID`,
-`AWS_CLOUDFRONT_KEY_PAIR_ID`, `AWS_CLOUDFRONT_PRIVATE_KEY_PATH`를 설정합니다. TTL은
-`DIRECT_UPLOAD_PRESIGN_TTL=PT10M`, `CLOUDFRONT_SIGNED_URL_TTL=PT5M` 형식으로 조정할 수 있습니다.
-
-IAM Role에는 대상 prefix의 `s3:PutObject`, `s3:GetObject`, `s3:HeadObject`, `s3:DeleteObject`와
-`cloudfront:CreateInvalidation`만 허용합니다. S3 CORS는 프런트엔드 Origin의 `PUT`과 `Content-Type`만
-허용하고, 미완료 객체는 Lifecycle 정책으로 삭제합니다. `profiles/*`와 `chat/*` 모두
-CloudFront Signed URL 전용 동작으로 구성하며 공개 이미지 경로를 두지 않습니다.
-
 | 변수 | 필수 | 기본값 | 설명                          |
 | --- | --- | --- |-----------------------------|
 | `ENCRYPTION_KEY` | ✅ | 없음 | AES-256 암복호화를 위한 64자리 HEX 키 |

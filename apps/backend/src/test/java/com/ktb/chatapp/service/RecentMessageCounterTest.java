@@ -23,11 +23,8 @@ import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 @ExtendWith(MockitoExtension.class)
 class RecentMessageCounterTest {
 
-    @Mock
-    private MessageRepository messageRepository;
-
-    @Mock
-    private MongoOperations mongoOperations;
+    @Mock private MessageRepository messageRepository;
+    @Mock private MongoOperations mongoOperations;
 
     @Test
     void countRecentMessagesByRoomIds_returnsCountsFromOneAggregation() {
@@ -49,13 +46,6 @@ class RecentMessageCounterTest {
     @Test
     void countRecentMessagesByRoomIds_withNoRoomIds_returnsEmptyWithoutQuery() {
         assertThat(counter().countRecentMessagesByRoomIds(List.of())).isEmpty();
-
-        verifyNoInteractions(mongoOperations, messageRepository);
-    }
-
-    @Test
-    void countRecentMessagesByRoomIds_withNullRoomIds_returnsEmptyWithoutQuery() {
-        assertThat(counter().countRecentMessagesByRoomIds(null)).isEmpty();
 
         verifyNoInteractions(mongoOperations, messageRepository);
     }

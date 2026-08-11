@@ -2,31 +2,46 @@ import { useState, useCallback, useRef } from 'react';
 import axiosInstance from '@/services/axios';
 import { CONNECTION_STATUS } from './useServerConnection';
 
-export const ROOM_PAGE_SIZE = 20;
+const ROOM_PAGE_SIZE = 10;
 
-export const mergeRoomPage = (currentRooms, nextRooms) => {
-  const mergedRooms = [...currentRooms];
-  const indexes = new Map(
-    mergedRooms
-      .map((room, index) => [room?._id, index])
-      .filter(([roomId]) => roomId)
-  );
+const createMetadata = (metadata = {}, requestedPage = 0, currentCount = 0) => {
+  const normalizedMetadata = metadata ?? {};
+  const total =
+    Number.isInteger(normalizedMetadata.total) && normalizedMetadata.total >= 0
+      ? normalizedMetadata.total
+      : currentCount;
+  const pageSize =
+    Number.isInteger(normalizedMetadata.pageSize) &&
+    normalizedMetadata.pageSize > 0
+      ? normalizedMetadata.pageSize
+      : ROOM_PAGE_SIZE;
+  const totalPages =
+    Number.isInteger(normalizedMetadata.totalPages) &&
+    normalizedMetadata.totalPages > 0
+      ? normalizedMetadata.totalPages
+      : Math.max(Math.ceil(total / pageSize), 1);
+  const serverPage =
+    Number.isInteger(normalizedMetadata.page) && normalizedMetadata.page >= 0
+      ? normalizedMetadata.page
+      : requestedPage;
+  const page = serverPage;
 
-  nextRooms.forEach((room) => {
-    const roomId = room?._id;
-    if (!roomId) {
-      mergedRooms.push(room);
-      return;
-    }
-
-    const existingIndex = indexes.get(roomId);
-    if (existingIndex === undefined) {
-      indexes.set(roomId, mergedRooms.length);
-      mergedRooms.push(room);
-    }
-  });
-
-  return mergedRooms;
+  return {
+    total,
+    page,
+    pageSize,
+    totalPages,
+    hasMore:
+      typeof normalizedMetadata.hasMore === 'boolean'
+        ? normalizedMetadata.hasMore
+        : page < totalPages - 1,
+    currentCount:
+      Number.isInteger(normalizedMetadata.currentCount) &&
+      normalizedMetadata.currentCount >= 0
+        ? normalizedMetadata.currentCount
+        : currentCount,
+    sort: normalizedMetadata.sort ?? null,
+  };
 };
 
 export const useRoomList = ({
@@ -36,25 +51,32 @@ export const useRoomList = ({
   setConnectionStatus,
   isRetrying,
   attemptConnection,
+  canJoinRooms = connectionStatus === CONNECTION_STATUS.CONNECTED,
 }) => {
   const [rooms, setRooms] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [joiningRoom, setJoiningRoom] = useState(false);
-  const [metadata, setMetadata] = useState(null);
+  const [joiningRoomId, setJoiningRoomId] = useState(null);
+  const [joinError, setJoinError] = useState(null);
+  const metadataRef = useRef(createMetadata());
+  const [metadata, setMetadataState] = useState(metadataRef.current);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const isLoadingRef = useRef(false);
-  const metadataRef = useRef(null);
+  const isLoadingMoreRef = useRef(false);
+  const joiningRoomRef = useRef(null);
 
-  const updateMetadata = useCallback((updater) => {
-    const currentMetadata = metadataRef.current;
-    const nextMetadata =
-      typeof updater === 'function' ? updater(currentMetadata) : updater;
-    metadataRef.current = nextMetadata;
-    setMetadata(nextMetadata);
+  const setMetadata = useCallback((nextMetadata) => {
+    setMetadataState((currentMetadata) => {
+      const resolvedMetadata =
+        typeof nextMetadata === 'function'
+          ? nextMetadata(currentMetadata)
+          : nextMetadata;
+      metadataRef.current = resolvedMetadata;
+      return resolvedMetadata;
+    });
   }, []);
 
   const handleFetchError = useCallback((error) => {
@@ -62,7 +84,7 @@ export const useRoomList = ({
     let errorType = 'danger';
     let showRetry = !isRetrying;
 
-    if (error.message === 'AUTH_EXPIRED') {
+    if (error.code === 'AUTH_EXPIRED' || error.message === 'AUTH_EXPIRED') {
       errorMessage = '인증이 만료되었습니다. 다시 로그인해주세요.';
       errorType = 'danger';
       showRetry = false;
@@ -78,7 +100,7 @@ export const useRoomList = ({
       return;
     }
 
-    if (error.message === 'SERVER_UNREACHABLE') {
+    if (error.isNetworkError || error.message === 'SERVER_UNREACHABLE') {
       errorMessage = '서버와 연결할 수 없습니다. 다시 시도해주세요.';
       errorType = 'warning';
       showRetry = true;
@@ -94,49 +116,80 @@ export const useRoomList = ({
     setConnectionStatus(CONNECTION_STATUS.ERROR);
   }, [isRetrying, setConnectionStatus]);
 
-  const loadRooms = useCallback(async ({ page = 0, append = false } = {}) => {
-    await attemptConnection();
+  const loadRooms = useCallback(async (page = 0, { append = false } = {}) => {
+    if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+      await attemptConnection();
+    }
 
     const response = await axiosInstance.get('/api/rooms', {
-      params: { page, pageSize: ROOM_PAGE_SIZE },
+      params: {
+        page,
+        pageSize: ROOM_PAGE_SIZE,
+      },
     });
+    const payload = response?.data;
 
-    if (!response?.data?.data) {
+    if (payload?.success === false || !Array.isArray(payload?.data)) {
       throw new Error('INVALID_RESPONSE');
     }
 
-    const nextRooms = response.data.data;
-    const nextMetadata = response.data.metadata ?? null;
-
-    setRooms((currentRooms) =>
-      append ? mergeRoomPage(currentRooms, nextRooms) : nextRooms
+    if (append) {
+      setRooms((currentRooms) => {
+        const loadedIds = new Set(currentRooms.map((room) => room._id));
+        const uniqueRooms = payload.data.filter(
+          (room) => room?._id && !loadedIds.has(room._id)
+        );
+        return [...currentRooms, ...uniqueRooms];
+      });
+    } else {
+      setRooms(payload.data);
+    }
+    const nextMetadata = createMetadata(
+      payload.metadata,
+      page,
+      payload.data.length
     );
-    updateMetadata(nextMetadata);
-  }, [attemptConnection, updateMetadata]);
+    metadataRef.current = nextMetadata;
+    setMetadataState(nextMetadata);
+    setConnectionStatus(CONNECTION_STATUS.CONNECTED);
+  }, [attemptConnection, connectionStatus, setConnectionStatus]);
 
   const fetchRooms = useCallback(async () => {
     if (!currentUser?.token || isLoadingRef.current) {
-      return;
+      return false;
     }
 
     try {
       isLoadingRef.current = true;
 
+      if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+        setConnectionStatus(CONNECTION_STATUS.CONNECTING);
+      }
       setLoading(true);
       setError(null);
 
-      await loadRooms({ page: 0 });
+      await loadRooms(0);
 
       if (isInitialLoad) {
         setIsInitialLoad(false);
       }
+
+      return true;
     } catch (error) {
       handleFetchError(error);
+      return false;
     } finally {
       setLoading(false);
       isLoadingRef.current = false;
     }
-  }, [currentUser, isInitialLoad, loadRooms, handleFetchError]);
+  }, [
+    currentUser,
+    connectionStatus,
+    setConnectionStatus,
+    isInitialLoad,
+    loadRooms,
+    handleFetchError,
+  ]);
 
   /**
    * 이미 그려진 목록을 유지한 채 다시 조회한다.
@@ -149,9 +202,11 @@ export const useRoomList = ({
 
     try {
       isLoadingRef.current = true;
-      setRefreshing(true);
+      if (!silent) {
+        setRefreshing(true);
+      }
 
-      await loadRooms({ page: 0 });
+      await loadRooms(0);
       setError(null);
 
       return true;
@@ -167,7 +222,9 @@ export const useRoomList = ({
 
       return false;
     } finally {
-      setRefreshing(false);
+      if (!silent) {
+        setRefreshing(false);
+      }
       isLoadingRef.current = false;
     }
   }, [currentUser, loadRooms]);
@@ -177,73 +234,121 @@ export const useRoomList = ({
     if (
       !currentUser?.token ||
       !currentMetadata?.hasMore ||
-      isLoadingRef.current
+      isLoadingRef.current ||
+      isLoadingMoreRef.current
     ) {
       return false;
     }
 
     try {
-      isLoadingRef.current = true;
+      isLoadingMoreRef.current = true;
       setLoadingMore(true);
-      await loadRooms({ page: currentMetadata.page + 1, append: true });
       setError(null);
+      await loadRooms((currentMetadata.page ?? 0) + 1, { append: true });
       return true;
     } catch (error) {
-      handleFetchError(error);
+      setError({
+        title: '채팅방 추가 로드 실패',
+        message: '채팅방을 더 불러오지 못했습니다. 잠시 후 다시 시도해주세요.',
+        type: 'warning',
+        showRetry: false,
+      });
       return false;
     } finally {
       setLoadingMore(false);
-      isLoadingRef.current = false;
+      isLoadingMoreRef.current = false;
     }
-  }, [currentUser, handleFetchError, loadRooms]);
+  }, [currentUser, loadRooms]);
 
-  const handleJoinRoom = useCallback(async (roomId) => {
-    if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
-      setError({
-        title: '채팅방 입장 실패',
-        message: '서버와 연결이 끊어져 있습니다.',
-        type: 'danger',
+  const clearJoinError = useCallback((roomId) => {
+    setJoinError((current) => (
+      !roomId || current?.roomId === roomId ? null : current
+    ));
+  }, []);
+
+  const handleJoinRoom = useCallback(async (roomId, password) => {
+    if (!canJoinRooms) {
+      setJoinError({
+        roomId,
+        message: '서버와 실시간 연결이 완료된 후 다시 시도해주세요.',
       });
-      return;
+      return false;
     }
 
-    setJoiningRoom(true);
+    if (joiningRoomRef.current) {
+      return false;
+    }
+
+    joiningRoomRef.current = roomId;
+    setJoiningRoomId(roomId);
+    setJoinError(null);
 
     try {
-      const response = await axiosInstance.post(`/api/rooms/${roomId}/join`, {});
+      const response = await axiosInstance.post(
+        `/api/rooms/${roomId}/join`,
+        password ? { password } : {},
+        // 방 비밀번호 오류도 401이므로 공통 인증 만료 처리와 구분한다.
+        { handleAuthError: false }
+      );
 
       if (response.data.success) {
         router.push(`/chat/${roomId}`);
+        return true;
       }
+
+      setJoinError({
+        roomId,
+        message: response.data?.message || '입장에 실패했습니다.',
+      });
+      return false;
     } catch (error) {
+      const status = error.response?.status ?? error.status;
+      const responseMessage = error.response?.data?.message ?? error.data?.message;
       let errorMessage = '입장에 실패했습니다.';
-      if (error.response?.status === 404) {
+
+      if (status === 401 && responseMessage?.includes('비밀번호')) {
+        errorMessage = responseMessage;
+      } else if (status === 401) {
+        errorMessage = '인증이 만료되었습니다. 다시 로그인해주세요.';
+        setError({
+          title: '인증 만료',
+          message: errorMessage,
+          type: 'danger',
+          showRetry: false,
+        });
+        setConnectionStatus(CONNECTION_STATUS.ERROR);
+      } else if (status === 404) {
         errorMessage = '채팅방을 찾을 수 없습니다.';
-      } else if (error.response?.status === 403) {
+      } else if (status === 403) {
         errorMessage = '채팅방 입장 권한이 없습니다.';
       }
 
-      setError({
-        title: '채팅방 입장 실패',
-        message: error.response?.data?.message || errorMessage,
-        type: 'danger',
+      setJoinError({
+        roomId,
+        message: responseMessage || errorMessage,
       });
+      return false;
     } finally {
-      setJoiningRoom(false);
+      if (joiningRoomRef.current === roomId) {
+        joiningRoomRef.current = null;
+        setJoiningRoomId(null);
+      }
     }
-  }, [connectionStatus, router]);
+  }, [canJoinRooms, router, setConnectionStatus]);
 
   return {
     rooms,
     setRooms,
     error,
     setError,
-    setMetadata: updateMetadata,
     loading,
-    loadingMore,
     refreshing,
+    joiningRoomId,
+    joinError,
+    clearJoinError,
     metadata,
-    joiningRoom,
+    setMetadata,
+    loadingMore,
     fetchRooms,
     loadMoreRooms,
     refreshRooms,

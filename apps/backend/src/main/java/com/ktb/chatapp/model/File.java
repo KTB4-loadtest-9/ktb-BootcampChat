@@ -8,7 +8,6 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
-import org.springframework.data.mongodb.core.index.Indexed;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -35,9 +34,6 @@ public class File {
     private long size;
 
     private String path;
-
-    @Indexed(unique = true, sparse = true)
-    private String directUploadId;
 
     @Field("user")
     private String user;

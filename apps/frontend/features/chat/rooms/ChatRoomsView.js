@@ -1,28 +1,40 @@
-import React, { useEffect, useRef } from 'react';
-import { ErrorCircleIcon, NetworkIcon, RefreshOutlineIcon } from '@vapor-ui/icons';
-import { Button, Text, Badge, Callout, Box, VStack, HStack, Spinner } from '@vapor-ui/core';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ErrorCircleIcon,
+  NetworkIcon,
+  RefreshOutlineIcon,
+} from '@vapor-ui/icons';
+import {
+  Button,
+  Text,
+  Badge,
+  Callout,
+  Box,
+  VStack,
+  HStack,
+  Spinner,
+} from '@vapor-ui/core';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRoomsSocket } from './useRoomsSocket';
-import {
-  useServerConnection,
-  CONNECTION_STATUS,
-} from './useServerConnection';
+import { useServerConnection, CONNECTION_STATUS } from './useServerConnection';
 import { useRoomList } from './useRoomList';
 import RoomsTable from './RoomsTable';
 import ConnectionErrorBanner from '@/components/ConnectionErrorBanner';
 
 const STATUS_CONFIG = {
-  [CONNECTION_STATUS.CHECKING]: { label: "연결 확인 중...", color: "warning" },
-  [CONNECTION_STATUS.CONNECTING]: { label: "연결 중...", color: "warning" },
-  [CONNECTION_STATUS.CONNECTED]: { label: "연결됨", color: "success" },
-  [CONNECTION_STATUS.DISCONNECTED]: { label: "연결 끊김", color: "danger" },
-  [CONNECTION_STATUS.ERROR]: { label: "연결 오류", color: "danger" },
+  [CONNECTION_STATUS.CHECKING]: { label: '연결 확인 중...', color: 'warning' },
+  [CONNECTION_STATUS.CONNECTING]: { label: '연결 중...', color: 'warning' },
+  [CONNECTION_STATUS.CONNECTED]: { label: '연결됨', color: 'success' },
+  [CONNECTION_STATUS.DISCONNECTED]: { label: '연결 끊김', color: 'danger' },
+  [CONNECTION_STATUS.ERROR]: { label: '연결 오류', color: 'danger' },
 };
 
 const ROOM_LIST_REFRESH_INTERVAL = 30000;
 
 const LoadingIndicator = ({ text }) => (
-  <HStack $css={{ gap: '$200', justifyContent: 'center', alignItems: 'center' }}>
+  <HStack
+    $css={{ gap: '$200', justifyContent: 'center', alignItems: 'center' }}
+  >
     <Spinner size="md" colorPalette="primary" aria-label={text} />
     <Text typography="body2">{text}</Text>
   </HStack>
@@ -30,39 +42,51 @@ const LoadingIndicator = ({ text }) => (
 
 export default function ChatRoomsView({ router }) {
   const { user: currentUser } = useAuth();
-  const currentUserKey = currentUser?.id || currentUser?._id || currentUser?.email || currentUser?.token;
+  const currentUserKey =
+    currentUser?.id ||
+    currentUser?._id ||
+    currentUser?.email ||
+    currentUser?.token;
 
   const {
-    connectionStatus,
-    setConnectionStatus,
+    connectionStatus: httpConnectionStatus,
+    setConnectionStatus: setHttpConnectionStatus,
     isRetrying,
     attemptConnection,
   } = useServerConnection();
+  const [socketConnectionStatus, setSocketConnectionStatus] = useState(
+    CONNECTION_STATUS.CHECKING
+  );
+  const canJoinRooms =
+    httpConnectionStatus === CONNECTION_STATUS.CONNECTED &&
+    socketConnectionStatus === CONNECTION_STATUS.CONNECTED;
 
   const {
     rooms,
     setRooms,
-    setMetadata,
     error,
     loading,
     loadingMore,
     refreshing,
+    joiningRoomId,
+    joinError,
+    clearJoinError,
     metadata,
-    joiningRoom,
+    setMetadata,
     fetchRooms,
-    loadMoreRooms,
     refreshRooms,
+    loadMoreRooms,
     handleJoinRoom,
   } = useRoomList({
     currentUser,
     router,
-    connectionStatus,
-    setConnectionStatus,
+    connectionStatus: httpConnectionStatus,
+    setConnectionStatus: setHttpConnectionStatus,
     isRetrying,
     attemptConnection,
+    canJoinRooms,
   });
 
-  const connectionCheckTimerRef = useRef(null);
   const initialFetchStartedRef = useRef(false);
   const refreshRoomsRef = useRef(refreshRooms);
 
@@ -105,40 +129,36 @@ export default function ChatRoomsView({ router }) {
     };
   }, [currentUserKey, fetchRooms]);
 
-  useEffect(() => {
-    if (!currentUserKey || connectionStatus !== CONNECTION_STATUS.CHECKING) return;
-
-    connectionCheckTimerRef.current = setInterval(() => {
-      attemptConnection();
-    }, 5000);
-
-    return () => {
-      if (connectionCheckTimerRef.current) {
-        clearInterval(connectionCheckTimerRef.current);
-      }
-    };
-  }, [currentUserKey, connectionStatus, attemptConnection]);
-
   // 활성도 지표는 소켓 이벤트만으로 만료를 알 수 없어 주기적으로 다시 조회한다.
   // 보이지 않는 탭에서는 갱신을 멈추고, 다시 보일 때 즉시 한 번 따라잡는다.
   useEffect(() => {
-    if (!currentUserKey || connectionStatus !== CONNECTION_STATUS.CONNECTED) return;
+    if (!currentUserKey || httpConnectionStatus !== CONNECTION_STATUS.CONNECTED)
+      return;
 
     const refreshWhenVisible = () => {
       if (document.visibilityState !== 'visible') return;
       refreshRoomsRef.current({ silent: true });
     };
 
-    const refreshTimer = setInterval(refreshWhenVisible, ROOM_LIST_REFRESH_INTERVAL);
+    const refreshTimer = setInterval(
+      refreshWhenVisible,
+      ROOM_LIST_REFRESH_INTERVAL
+    );
     document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       clearInterval(refreshTimer);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
-  }, [currentUserKey, connectionStatus]);
+  }, [currentUserKey, httpConnectionStatus]);
 
-  useRoomsSocket({ currentUser, setConnectionStatus, rooms, setRooms, setMetadata });
+  useRoomsSocket({
+    currentUser,
+    setConnectionStatus: setSocketConnectionStatus,
+    rooms,
+    setRooms,
+    setMetadata,
+  });
 
   return (
     <Box
@@ -163,14 +183,30 @@ export default function ChatRoomsView({ router }) {
         <VStack $css={{ gap: '$300', alignItems: 'center' }}>
           <HStack
             className="w-full"
-            $css={{ gap: '$300', alignItems: 'center', justifyContent: 'space-between' }}
+            $css={{
+              gap: '$300',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
           >
             <Text typography="heading3">채팅방 목록</Text>
             <HStack $css={{ gap: '$200' }}>
-              <Badge colorPalette={STATUS_CONFIG[connectionStatus]?.color || 'danger'}>
-                {STATUS_CONFIG[connectionStatus].label}
+              <Badge
+                colorPalette={
+                  STATUS_CONFIG[httpConnectionStatus]?.color || 'danger'
+                }
+              >
+                서버 {STATUS_CONFIG[httpConnectionStatus]?.label || '연결 오류'}
               </Badge>
-              {error || connectionStatus === CONNECTION_STATUS.ERROR ? (
+              <Badge
+                colorPalette={
+                  STATUS_CONFIG[socketConnectionStatus]?.color || 'danger'
+                }
+              >
+                실시간{' '}
+                {STATUS_CONFIG[socketConnectionStatus]?.label || '연결 오류'}
+              </Badge>
+              {error || httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
                 <Button
                   variant="outline"
                   size="sm"
@@ -196,21 +232,28 @@ export default function ChatRoomsView({ router }) {
           </HStack>
         </VStack>
 
-        
         {error && (
           <Callout.Root
-            colorPalette={error.type === 'danger' ? 'danger' : error.type === 'warning' ? 'warning' : 'primary'}
+            colorPalette={
+              error.type === 'danger'
+                ? 'danger'
+                : error.type === 'warning'
+                  ? 'warning'
+                  : 'primary'
+            }
           >
             <HStack $css={{ gap: '$200', alignItems: 'flex-start' }}>
               <Callout.Icon>
-                {connectionStatus === CONNECTION_STATUS.ERROR ? (
+                {httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
                   <NetworkIcon size={18} />
                 ) : (
                   <ErrorCircleIcon size={18} />
                 )}
               </Callout.Icon>
               <VStack $css={{ gap: '$150', alignItems: 'flex-start' }}>
-                <Text typography="subtitle2" style={{ fontWeight: 500 }}>{error.title}</Text>
+                <Text typography="subtitle2" style={{ fontWeight: 500 }}>
+                  {error.title}
+                </Text>
                 <Text typography="body2">{error.message}</Text>
                 {error.showRetry && !isRetrying && (
                   <Button
@@ -226,43 +269,74 @@ export default function ChatRoomsView({ router }) {
           </Callout.Root>
         )}
 
-        {connectionStatus === CONNECTION_STATUS.ERROR ? (
+        {httpConnectionStatus === CONNECTION_STATUS.CONNECTED &&
+          socketConnectionStatus !== CONNECTION_STATUS.CONNECTED && (
+            <Callout.Root colorPalette="warning">
+              <HStack $css={{ gap: '$200', alignItems: 'center' }}>
+                <Callout.Icon>
+                  <NetworkIcon size={18} />
+                </Callout.Icon>
+                <Text typography="body2">
+                  실시간 연결이 완료될 때까지 채팅방 입장을 잠시 기다려주세요.
+                </Text>
+              </HStack>
+            </Callout.Root>
+          )}
+        {httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
           <ConnectionErrorBanner message="채팅 서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요." />
         ) : loading ? (
           <Box $css={{ padding: '$400' }}>
             <LoadingIndicator text="채팅방 목록을 불러오는 중..." />
           </Box>
         ) : rooms.length > 0 ? (
-          <RoomsTable
-            rooms={rooms}
-            connectionStatus={connectionStatus}
-            onJoinRoom={handleJoinRoom}
-          />
-        ) : !error && (
-          <VStack
-            $css={{ gap: '$300', alignItems: 'center', padding: '$400' }}
-            data-testid="rooms-empty"
-          >
-            <Text typography="body1">생성된 채팅방이 없습니다.</Text>
-            <Button
-              colorPalette="primary"
-              onClick={() => router.push('/chat/new')}
-              disabled={connectionStatus !== CONNECTION_STATUS.CONNECTED}
-            >
-              새 채팅방 만들기
-            </Button>
-          </VStack>
-        )}
+          <VStack $css={{ gap: '$250', width: '100%' }}>
+            <RoomsTable
+              rooms={rooms}
+              canJoinRooms={canJoinRooms}
+              joiningRoomId={joiningRoomId}
+              joinError={joinError}
+              onClearJoinError={clearJoinError}
+              onJoinRoom={handleJoinRoom}
+            />
 
-        {rooms.length > 0 && metadata?.hasMore && (
-          <Button
-            variant="outline"
-            onClick={loadMoreRooms}
-            disabled={loadingMore}
-            data-testid="load-more-rooms-button"
-          >
-            {loadingMore ? '불러오는 중' : '더 보기'}
-          </Button>
+            {metadata?.hasMore && (
+              <HStack
+                $css={{
+                  gap: '$200',
+                  width: '100%',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                aria-label="채팅방 추가 로드"
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadMoreRooms}
+                  disabled={loadingMore || refreshing}
+                  data-testid="load-more-rooms-button"
+                >
+                  {loadingMore ? '불러오는 중...' : '채팅방 더 보기'}
+                </Button>
+              </HStack>
+            )}
+          </VStack>
+        ) : (
+          !error && (
+            <VStack
+              $css={{ gap: '$300', alignItems: 'center', padding: '$400' }}
+              data-testid="rooms-empty"
+            >
+              <Text typography="body1">생성된 채팅방이 없습니다.</Text>
+              <Button
+                colorPalette="primary"
+                onClick={() => router.push('/chat/new')}
+                disabled={httpConnectionStatus !== CONNECTION_STATUS.CONNECTED}
+              >
+                새 채팅방 만들기
+              </Button>
+            </VStack>
+          )
         )}
       </VStack>
     </Box>

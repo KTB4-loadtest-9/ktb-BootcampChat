@@ -80,7 +80,7 @@ class MessageLoaderIntegrationTest {
         userRepository.save(testUser);
 
         // MessageReadStatusService mock 설정
-        doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString(), anyString());
+        doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString());
     }
 
     @AfterEach

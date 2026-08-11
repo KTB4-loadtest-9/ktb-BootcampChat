@@ -11,7 +11,7 @@ BACKEND_SCALE ?= 3
 DEPLOY_HOSTS_FILE ?= $(CURDIR)/../../.deploy-hosts
 DEPLOY_SERVERS ?= $(or $(shell cat $(DEPLOY_HOSTS_FILE) 2>/dev/null),your-backend-server1)
 DEPLOY_PATH ?= /home/ubuntu/ktb-chat-backend
-JVM_OPTS ?= -Xms1280m -Xmx1280m -XX:+UseG1GC
+JVM_OPTS ?= -Xmx1024m
 JAVA_TARGET_MAJOR ?= 25
 JAVA_TARGET_SDKMAN ?= 25.0.3-librca
 

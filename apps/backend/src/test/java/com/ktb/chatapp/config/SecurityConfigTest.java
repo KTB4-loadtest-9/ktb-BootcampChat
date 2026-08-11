@@ -36,10 +36,14 @@ class SecurityConfigTest {
     @MockitoBean
     private RateLimitService rateLimitService;
 
+    /**
+     * 업로드된 이미지는 브라우저가 {@code <img src>}로 직접 요청하므로 인증 헤더를 실을 수 없다.
+     * 404는 파일이 없다는 뜻이고, 401이면 필터 체인이 요청을 막았다는 뜻이다.
+     */
     @Test
-    void profileImagesRequireAuthentication() throws Exception {
+    void uploadedFilesAreReachableWithoutAuthHeaders() throws Exception {
         mockMvc.perform(get("/api/files/profiles/sample.png"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNotFound());
     }
 
     @Test

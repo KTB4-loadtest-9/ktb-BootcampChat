@@ -140,10 +140,7 @@ public class UserService {
      */
     private void deleteOldProfileImage(String profileImageKey) {
         try {
-            String storageKey = profileImageKey;
-            int profilePath = profileImageKey.indexOf("/profiles/");
-            if (profilePath >= 0) storageKey = profileImageKey.substring(profilePath + 1);
-            storagePort.delete(storageKey);
+            storagePort.delete(profileImageKey);
             log.info("기존 프로필 이미지 삭제 완료: {}", profileImageKey);
         } catch (RuntimeException e) {
             log.warn("기존 프로필 이미지 삭제 실패: {}", e.getMessage());

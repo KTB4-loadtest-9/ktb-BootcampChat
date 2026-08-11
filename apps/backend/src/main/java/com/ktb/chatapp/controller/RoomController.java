@@ -20,13 +20,9 @@ import jakarta.validation.Valid;
 import java.security.Principal;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -85,8 +81,8 @@ public class RoomController {
         }
     }
 
-    // 채팅방 목록 조회
-    @Operation(summary = "채팅방 목록 조회", description = "채팅방 목록을 최신순으로 페이지 단위 조회합니다. Rate Limit이 적용됩니다.")
+    // 전체 채팅방 목록 조회
+    @Operation(summary = "채팅방 목록 조회", description = "전체 채팅방 목록을 최신순으로 조회합니다. Rate Limit이 적용됩니다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "채팅방 목록 조회 성공",
             content = @Content(schema = @Schema(implementation = RoomsResponse.class))),
@@ -102,18 +98,11 @@ public class RoomController {
     @RateLimit
     public ResponseEntity<?> getAllRooms(
             Principal principal,
-            @Parameter(description = "0부터 시작하는 페이지 번호", example = "0")
             @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "페이지 크기 (기본 20, 최대 50)", example = "20")
-            @RequestParam(defaultValue = "20") int pageSize
-    ) {
-        if (page < 0 || pageSize < 1 || pageSize > RoomService.MAX_PAGE_SIZE) {
-            return ResponseEntity.badRequest()
-                    .body(StandardResponse.error("페이지 번호 또는 페이지 크기가 올바르지 않습니다."));
-        }
+            @RequestParam(defaultValue = "10") int size) {
 
         try {
-            RoomsResponse response = roomService.getAllRooms(principal.getName(), page, pageSize);
+            RoomsResponse response = roomService.getAllRooms(principal.getName(), page, size);
 
             // 캐시 설정
             return ResponseEntity.ok()
@@ -164,7 +153,8 @@ public class RoomController {
                 );
             }
 
-            RoomResponse roomResponse = roomService.createRoomResponse(createRoomRequest, principal.getName());
+            Room savedRoom = roomService.createRoom(createRoomRequest, principal.getName());
+            RoomResponse roomResponse = mapToRoomResponse(savedRoom, principal.getName());
 
             return ResponseEntity.status(201).body(
                 Map.of(
@@ -247,12 +237,14 @@ public class RoomController {
             @RequestBody JoinRoomRequest joinRoomRequest,
             Principal principal) {
         try {
-            RoomResponse roomResponse = roomService.joinRoomResponse(roomId, joinRoomRequest.getPassword(), principal.getName());
+            Room joinedRoom = roomService.joinRoom(roomId, joinRoomRequest.getPassword(), principal.getName());
 
-            if (roomResponse == null) {
+            if (joinedRoom == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(StandardResponse.error("채팅방을 찾을 수 없습니다."));
             }
+
+            RoomResponse roomResponse = mapToRoomResponse(joinedRoom, principal.getName());
             
             return ResponseEntity.ok(
                 Map.of(
@@ -278,29 +270,20 @@ public class RoomController {
     }
 
     private RoomResponse mapToRoomResponse(Room room, String name) {
-        Set<String> participantIds = room.getParticipantIds() == null
-                ? Set.of()
-                : room.getParticipantIds();
-        Set<String> userIds = new HashSet<>(participantIds);
-        if (room.getCreator() != null) {
-            userIds.add(room.getCreator());
-        }
-        Map<String, User> usersById = userRepository.findAllById(userIds).stream()
-                .collect(Collectors.toMap(User::getId, Function.identity()));
-
-        User creator = usersById.get(room.getCreator());
+        User creator = userRepository.findById(room.getCreator()).orElse(null);
         if (creator == null) {
             throw new RuntimeException("Creator not found for room " + room.getId());
         }
         UserResponse creatorSummary = UserResponse.from(creator);
-        List<UserResponse> participantSummaries = participantIds
+        List<UserResponse> participantSummaries = room.getParticipantIds()
                 .stream()
-                .map(usersById::get).peek(user -> {
-                    if (user == null) {
-                        log.warn("Participant not found: roomId={}", room.getId());
+                .map(userRepository::findById).peek(optUser -> {
+                    if (optUser.isEmpty()) {
+                        log.warn("Participant not found: roomId={}, userId={}", room.getId(), optUser);
                     }
                 })
-                .filter(java.util.Objects::nonNull)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
                 .map(UserResponse::from)
                 .toList();
 
