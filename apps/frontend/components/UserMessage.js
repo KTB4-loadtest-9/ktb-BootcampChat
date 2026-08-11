@@ -44,7 +44,7 @@ const UserMessage = ({
           <CustomAvatar
             user={user}
             size="lg"
-            persistent
+            persistent={false}
             showInitials
           />
           <span className="text-sm font-medium text-gray-300">

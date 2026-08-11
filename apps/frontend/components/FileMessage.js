@@ -90,7 +90,7 @@ const FileMessage = ({
     <CustomAvatar
       user={isMine ? currentUser : msg.sender}
       size="md"
-      persistent={true}
+      persistent={false}
       className="shrink-0"
       showInitials={true}
     />
