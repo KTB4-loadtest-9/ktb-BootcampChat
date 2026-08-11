@@ -1,28 +1,40 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ErrorCircleIcon, NetworkIcon, RefreshOutlineIcon } from '@vapor-ui/icons';
-import { Button, Text, Badge, Callout, Box, VStack, HStack, Spinner } from '@vapor-ui/core';
+import {
+  ErrorCircleIcon,
+  NetworkIcon,
+  RefreshOutlineIcon,
+} from '@vapor-ui/icons';
+import {
+  Button,
+  Text,
+  Badge,
+  Callout,
+  Box,
+  VStack,
+  HStack,
+  Spinner,
+} from '@vapor-ui/core';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRoomsSocket } from './useRoomsSocket';
-import {
-  useServerConnection,
-  CONNECTION_STATUS,
-} from './useServerConnection';
+import { useServerConnection, CONNECTION_STATUS } from './useServerConnection';
 import { useRoomList } from './useRoomList';
 import RoomsTable from './RoomsTable';
 import ConnectionErrorBanner from '@/components/ConnectionErrorBanner';
 
 const STATUS_CONFIG = {
-  [CONNECTION_STATUS.CHECKING]: { label: "연결 확인 중...", color: "warning" },
-  [CONNECTION_STATUS.CONNECTING]: { label: "연결 중...", color: "warning" },
-  [CONNECTION_STATUS.CONNECTED]: { label: "연결됨", color: "success" },
-  [CONNECTION_STATUS.DISCONNECTED]: { label: "연결 끊김", color: "danger" },
-  [CONNECTION_STATUS.ERROR]: { label: "연결 오류", color: "danger" },
+  [CONNECTION_STATUS.CHECKING]: { label: '연결 확인 중...', color: 'warning' },
+  [CONNECTION_STATUS.CONNECTING]: { label: '연결 중...', color: 'warning' },
+  [CONNECTION_STATUS.CONNECTED]: { label: '연결됨', color: 'success' },
+  [CONNECTION_STATUS.DISCONNECTED]: { label: '연결 끊김', color: 'danger' },
+  [CONNECTION_STATUS.ERROR]: { label: '연결 오류', color: 'danger' },
 };
 
 const ROOM_LIST_REFRESH_INTERVAL = 30000;
 
 const LoadingIndicator = ({ text }) => (
-  <HStack $css={{ gap: '$200', justifyContent: 'center', alignItems: 'center' }}>
+  <HStack
+    $css={{ gap: '$200', justifyContent: 'center', alignItems: 'center' }}
+  >
     <Spinner size="md" colorPalette="primary" aria-label={text} />
     <Text typography="body2">{text}</Text>
   </HStack>
@@ -30,12 +42,17 @@ const LoadingIndicator = ({ text }) => (
 
 export default function ChatRoomsView({ router }) {
   const { user: currentUser } = useAuth();
-  const currentUserKey = currentUser?.id || currentUser?._id || currentUser?.email || currentUser?.token;
+  const currentUserKey =
+    currentUser?.id ||
+    currentUser?._id ||
+    currentUser?.email ||
+    currentUser?.token;
 
   const {
     connectionStatus: httpConnectionStatus,
     setConnectionStatus: setHttpConnectionStatus,
     isRetrying,
+    attemptConnection,
   } = useServerConnection();
   const [socketConnectionStatus, setSocketConnectionStatus] = useState(
     CONNECTION_STATUS.CHECKING
@@ -64,6 +81,7 @@ export default function ChatRoomsView({ router }) {
     connectionStatus: httpConnectionStatus,
     setConnectionStatus: setHttpConnectionStatus,
     isRetrying,
+    attemptConnection,
     canJoinRooms,
   });
 
@@ -112,14 +130,18 @@ export default function ChatRoomsView({ router }) {
   // 활성도 지표는 소켓 이벤트만으로 만료를 알 수 없어 주기적으로 다시 조회한다.
   // 보이지 않는 탭에서는 갱신을 멈추고, 다시 보일 때 즉시 한 번 따라잡는다.
   useEffect(() => {
-    if (!currentUserKey || httpConnectionStatus !== CONNECTION_STATUS.CONNECTED) return;
+    if (!currentUserKey || httpConnectionStatus !== CONNECTION_STATUS.CONNECTED)
+      return;
 
     const refreshWhenVisible = () => {
       if (document.visibilityState !== 'visible') return;
       refreshRoomsRef.current({ silent: true });
     };
 
-    const refreshTimer = setInterval(refreshWhenVisible, ROOM_LIST_REFRESH_INTERVAL);
+    const refreshTimer = setInterval(
+      refreshWhenVisible,
+      ROOM_LIST_REFRESH_INTERVAL
+    );
     document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
@@ -158,15 +180,28 @@ export default function ChatRoomsView({ router }) {
         <VStack $css={{ gap: '$300', alignItems: 'center' }}>
           <HStack
             className="w-full"
-            $css={{ gap: '$300', alignItems: 'center', justifyContent: 'space-between' }}
+            $css={{
+              gap: '$300',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
           >
             <Text typography="heading3">채팅방 목록</Text>
             <HStack $css={{ gap: '$200' }}>
-              <Badge colorPalette={STATUS_CONFIG[httpConnectionStatus]?.color || 'danger'}>
+              <Badge
+                colorPalette={
+                  STATUS_CONFIG[httpConnectionStatus]?.color || 'danger'
+                }
+              >
                 서버 {STATUS_CONFIG[httpConnectionStatus]?.label || '연결 오류'}
               </Badge>
-              <Badge colorPalette={STATUS_CONFIG[socketConnectionStatus]?.color || 'danger'}>
-                실시간 {STATUS_CONFIG[socketConnectionStatus]?.label || '연결 오류'}
+              <Badge
+                colorPalette={
+                  STATUS_CONFIG[socketConnectionStatus]?.color || 'danger'
+                }
+              >
+                실시간{' '}
+                {STATUS_CONFIG[socketConnectionStatus]?.label || '연결 오류'}
               </Badge>
               {error || httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
                 <Button
@@ -194,10 +229,15 @@ export default function ChatRoomsView({ router }) {
           </HStack>
         </VStack>
 
-        
         {error && (
           <Callout.Root
-            colorPalette={error.type === 'danger' ? 'danger' : error.type === 'warning' ? 'warning' : 'primary'}
+            colorPalette={
+              error.type === 'danger'
+                ? 'danger'
+                : error.type === 'warning'
+                  ? 'warning'
+                  : 'primary'
+            }
           >
             <HStack $css={{ gap: '$200', alignItems: 'flex-start' }}>
               <Callout.Icon>
@@ -208,7 +248,9 @@ export default function ChatRoomsView({ router }) {
                 )}
               </Callout.Icon>
               <VStack $css={{ gap: '$150', alignItems: 'flex-start' }}>
-                <Text typography="subtitle2" style={{ fontWeight: 500 }}>{error.title}</Text>
+                <Text typography="subtitle2" style={{ fontWeight: 500 }}>
+                  {error.title}
+                </Text>
                 <Text typography="body2">{error.message}</Text>
                 {error.showRetry && !isRetrying && (
                   <Button
@@ -243,7 +285,7 @@ export default function ChatRoomsView({ router }) {
           <Box $css={{ padding: '$400' }}>
             <LoadingIndicator text="채팅방 목록을 불러오는 중..." />
           </Box>
-        ) : rooms.length > 0 ? (
+        ) : rooms.length > 0 || pagination?.page > 0 ? (
           <VStack $css={{ gap: '$250', width: '100%' }}>
             <RoomsTable
               rooms={rooms}
@@ -289,20 +331,22 @@ export default function ChatRoomsView({ router }) {
               </HStack>
             )}
           </VStack>
-        ) : !error && (
-          <VStack
-            $css={{ gap: '$300', alignItems: 'center', padding: '$400' }}
-            data-testid="rooms-empty"
-          >
-            <Text typography="body1">생성된 채팅방이 없습니다.</Text>
-            <Button
-              colorPalette="primary"
-              onClick={() => router.push('/chat/new')}
-              disabled={!canJoinRooms}
+        ) : (
+          !error && (
+            <VStack
+              $css={{ gap: '$300', alignItems: 'center', padding: '$400' }}
+              data-testid="rooms-empty"
             >
-              새 채팅방 만들기
-            </Button>
-          </VStack>
+              <Text typography="body1">생성된 채팅방이 없습니다.</Text>
+              <Button
+                colorPalette="primary"
+                onClick={() => router.push('/chat/new')}
+                disabled={httpConnectionStatus !== CONNECTION_STATUS.CONNECTED}
+              >
+                새 채팅방 만들기
+              </Button>
+            </VStack>
+          )
         )}
       </VStack>
     </Box>

@@ -5,18 +5,25 @@ import { CONNECTION_STATUS } from './useServerConnection';
 const ROOMS_PAGE_SIZE = 10;
 
 const createPagination = (metadata = {}, requestedPage = 0, currentCount = 0) => {
-  const total = Number.isInteger(metadata.total) && metadata.total >= 0
-    ? metadata.total
-    : currentCount;
-  const pageSize = Number.isInteger(metadata.pageSize) && metadata.pageSize > 0
-    ? metadata.pageSize
-    : ROOMS_PAGE_SIZE;
-  const totalPages = Number.isInteger(metadata.totalPages) && metadata.totalPages > 0
-    ? metadata.totalPages
-    : Math.max(Math.ceil(total / pageSize), 1);
-  const serverPage = Number.isInteger(metadata.page) && metadata.page >= 0
-    ? metadata.page
-    : requestedPage;
+  const normalizedMetadata = metadata ?? {};
+  const total =
+    Number.isInteger(normalizedMetadata.total) && normalizedMetadata.total >= 0
+      ? normalizedMetadata.total
+      : currentCount;
+  const pageSize =
+    Number.isInteger(normalizedMetadata.pageSize) &&
+    normalizedMetadata.pageSize > 0
+      ? normalizedMetadata.pageSize
+      : ROOMS_PAGE_SIZE;
+  const totalPages =
+    Number.isInteger(normalizedMetadata.totalPages) &&
+    normalizedMetadata.totalPages > 0
+      ? normalizedMetadata.totalPages
+      : Math.max(Math.ceil(total / pageSize), 1);
+  const serverPage =
+    Number.isInteger(normalizedMetadata.page) && normalizedMetadata.page >= 0
+      ? normalizedMetadata.page
+      : requestedPage;
   const page = Math.min(serverPage, totalPages - 1);
 
   return {
@@ -24,13 +31,16 @@ const createPagination = (metadata = {}, requestedPage = 0, currentCount = 0) =>
     page,
     pageSize,
     totalPages,
-    hasMore: typeof metadata.hasMore === 'boolean'
-      ? metadata.hasMore
-      : page < totalPages - 1,
-    currentCount: Number.isInteger(metadata.currentCount) && metadata.currentCount >= 0
-      ? metadata.currentCount
-      : currentCount,
-    sort: metadata.sort ?? null,
+    hasMore:
+      typeof normalizedMetadata.hasMore === 'boolean'
+        ? normalizedMetadata.hasMore
+        : page < totalPages - 1,
+    currentCount:
+      Number.isInteger(normalizedMetadata.currentCount) &&
+      normalizedMetadata.currentCount >= 0
+        ? normalizedMetadata.currentCount
+        : currentCount,
+    sort: normalizedMetadata.sort ?? null,
   };
 };
 
@@ -40,6 +50,7 @@ export const useRoomList = ({
   connectionStatus,
   setConnectionStatus,
   isRetrying,
+  attemptConnection,
   canJoinRooms = connectionStatus === CONNECTION_STATUS.CONNECTED,
 }) => {
   const [rooms, setRooms] = useState([]);
@@ -92,6 +103,10 @@ export const useRoomList = ({
   }, [isRetrying, setConnectionStatus]);
 
   const loadRooms = useCallback(async (page = 0) => {
+    if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+      await attemptConnection();
+    }
+
     const response = await axiosInstance.get('/api/rooms', {
       params: {
         page,
@@ -107,7 +122,7 @@ export const useRoomList = ({
     setRooms(payload.data);
     setPagination(createPagination(payload.metadata, page, payload.data.length));
     setConnectionStatus(CONNECTION_STATUS.CONNECTED);
-  }, [setConnectionStatus]);
+  }, [attemptConnection, connectionStatus, setConnectionStatus]);
 
   const fetchRooms = useCallback(async (page = pagination.page) => {
     if (!currentUser?.token || isLoadingRef.current) {

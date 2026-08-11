@@ -68,7 +68,9 @@ export const useRoomsSocket = ({
             if (!updatedRoom?._id) return;
 
             setRooms((prev) => {
-              const roomIndex = prev.findIndex((room) => room._id === updatedRoom._id);
+              const roomIndex = prev.findIndex(
+                (room) => room._id === updatedRoom._id
+              );
               if (roomIndex === -1) return prev;
 
               const nextRoom = { ...prev[roomIndex], ...updatedRoom };
@@ -82,13 +84,18 @@ export const useRoomsSocket = ({
           // 활성도 지표만 담긴 경량 payload이므로 방 정보를 덮지 않고 병합한다
           roomActivity: (activity) => {
             if (!activity?._id) return;
+            if (typeof activity.recentMessageCount !== 'number') return;
 
             setRooms((prev) => {
-              const roomIndex = prev.findIndex((room) => room._id === activity._id);
+              const roomIndex = prev.findIndex(
+                (room) => room._id === activity._id
+              );
               if (roomIndex === -1) return prev;
 
               const currentRoom = prev[roomIndex];
-              if (currentRoom.recentMessageCount === activity.recentMessageCount) {
+              if (
+                currentRoom.recentMessageCount === activity.recentMessageCount
+              ) {
                 return prev;
               }
 
@@ -106,7 +113,7 @@ export const useRoomsSocket = ({
           socket.on(event, handler);
         });
 
-        // connect()는 연결 완료 뒤 resolve되므로, 이미 지나간 connect 이벤트도 반영한다.
+        // connect()는 연결 완료 후 resolve되므로 최초 connect 이벤트는 이미 지나갔다.
         if (socket.connected) {
           setConnectionStatus(CONNECTION_STATUS.CONNECTED);
         }

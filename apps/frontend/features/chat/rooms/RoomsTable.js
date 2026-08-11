@@ -3,6 +3,13 @@ import { LockIcon, GroupIcon } from '@vapor-ui/icons';
 import { Button, Text, TextInput, VStack, HStack } from '@vapor-ui/core';
 import * as Table from '@/components/Table';
 
+const parseCreatedAt = (value) => {
+  if (value == null || (typeof value === 'string' && !value.trim())) return null;
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 const RoomsTable = ({
   rooms,
   canJoinRooms,
@@ -82,6 +89,7 @@ const RoomsTable = ({
             const roomJoinError = joinError?.roomId === room._id
               ? joinError.message
               : null;
+            const createdAt = parseCreatedAt(room.createdAt);
 
             return (
               <React.Fragment key={room._id}>
@@ -111,15 +119,17 @@ const RoomsTable = ({
                     {room.recentMessageCount > 0 ? room.recentMessageCount : '-'}
                   </Table.Cell>
                   <Table.Cell>
-                    <time dateTime={new Date(room.createdAt).toISOString()}>
-                      {new Date(room.createdAt).toLocaleString('ko-KR', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </time>
+                    {createdAt ? (
+                      <time dateTime={createdAt.toISOString()}>
+                        {createdAt.toLocaleString('ko-KR', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </time>
+                    ) : '-'}
                   </Table.Cell>
                   <Table.Cell>
                     <VStack $css={{ gap: '$100', alignItems: 'flex-start' }}>
