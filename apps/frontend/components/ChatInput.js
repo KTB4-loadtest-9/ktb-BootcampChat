@@ -46,14 +46,23 @@ const ChatInput = forwardRef(({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
+  const [filePreparationStatus, setFilePreparationStatus] = useState('idle');
   const [isDragging, setIsDragging] = useState(false);
   const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
+  const filePreparationRef = useRef(false);
 
   const handleFileValidationAndPreview = useCallback(async (file) => {
     if (!file) return;
 
+    filePreparationRef.current = true;
+    setFilePreparationStatus('preparing');
+
     try {
-      await fileService.validateFile(file);
+      const validationResult = await fileService.validateFile(file);
+      if (!validationResult.success) {
+        setUploadError(validationResult.message);
+        return;
+      }
       
       const filePreview = {
         file,
@@ -71,11 +80,20 @@ const ChatInput = forwardRef(({
       console.error('File validation error:', error);
       setUploadError(error.message);
     } finally {
+      setFilePreparationStatus('settled');
       if (fileInputRef?.current) {
         fileInputRef.current.value = '';
       }
     }
-  }, [onFileSelect]);
+  }, [fileInputRef, onFileSelect]);
+
+  // 검증 결과와 파일 preview가 반영된 렌더에서도 버튼을 잠근 뒤 다음 렌더에서 해제한다.
+  useEffect(() => {
+    if (filePreparationStatus !== 'settled') return;
+
+    filePreparationRef.current = false;
+    setFilePreparationStatus('idle');
+  }, [filePreparationStatus]);
 
   const handleFileRemove = useCallback((fileToRemove) => {
     setFiles(prev => prev.filter(file => file.name !== fileToRemove.name));
@@ -101,6 +119,10 @@ const ChatInput = forwardRef(({
 
   const handleSubmit = useCallback(async (e) => {
     e?.preventDefault();
+
+    if (filePreparationRef.current) {
+      return;
+    }
 
     if (files.length > 0) {
       try {
@@ -360,6 +382,8 @@ const ChatInput = forwardRef(({
   }, [message, setMessage, setShowEmojiPicker, messageInputRef]);
 
   const isDisabled = disabled || uploading || externalUploading;
+  const isPreparingFile = filePreparationStatus !== 'idle';
+  const isSendDisabled = isDisabled || isPreparingFile || (!message.trim() && files.length === 0);
 
   return (
     <>
@@ -423,7 +447,7 @@ const ChatInput = forwardRef(({
               <IconButton
                 size="xl"
                 onClick={handleSubmit}
-                disabled={isDisabled || (!message.trim() && files.length === 0)}
+                disabled={isSendDisabled}
                 aria-label="메시지 보내기"
                 data-testid="chat-send-button"
               >

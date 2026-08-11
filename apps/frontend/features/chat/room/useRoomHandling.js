@@ -28,6 +28,7 @@ export const useRoomHandling = ({
     setupCompleteRef,
     userRooms,
     processedMessageIds,
+    messageIndexById,
     messageProcessingRef,
     initialLoadCompletedRef,
   } = refs;
@@ -44,6 +45,8 @@ export const useRoomHandling = ({
   const { user, logout } = useAuth();
   const setupPromiseRef = useRef(null);
   const roomEventsUnsubscribeRef = useRef(null);
+  const fallbackMessageIndexById = useRef(new Map());
+  const activeMessageIndexById = messageIndexById || fallbackMessageIndexById;
   const MAX_SOCKET_RECONNECT_ATTEMPTS = 3;
   const MAX_MESSAGE_RETRY_ATTEMPTS = 3;
   const MESSAGE_TIMEOUT = 5000;
@@ -56,6 +59,7 @@ export const useRoomHandling = ({
         hasMore,
         isInitialLoad,
         processedMessageIds,
+        messageIndexById: activeMessageIndexById,
         setMessages,
         setHasMoreMessages,
         initialLoadCompletedRef,
@@ -63,6 +67,7 @@ export const useRoomHandling = ({
     },
     [
       processedMessageIds,
+      activeMessageIndexById,
       setMessages,
       setHasMoreMessages,
       initialLoadCompletedRef,
@@ -83,6 +88,7 @@ export const useRoomHandling = ({
         mountedRef,
         messageProcessingRef,
         processedMessageIds,
+        messageIndexById: activeMessageIndexById,
         initialLoadCompletedRef,
         processMessages,
         setRoom,
@@ -109,6 +115,7 @@ export const useRoomHandling = ({
     mountedRef,
     messageProcessingRef,
     processedMessageIds,
+    activeMessageIndexById,
     initialLoadCompletedRef,
     setRoom,
     setMessages,
