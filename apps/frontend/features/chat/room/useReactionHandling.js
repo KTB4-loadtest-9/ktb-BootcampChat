@@ -1,15 +1,27 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Toast } from '@/components/Toast';
 import socketClient from '@/lib/socket/socketClient';
 
 export const useReactionHandling = ({ currentUser, messages, setMessages }) => {
-  const [pendingReactions] = useState(new Map());
+  const messagesRef = useRef(messages);
+  const currentUserId = currentUser?.id;
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const handleReactionAdd = useCallback(async (messageId, reaction) => {
+    let previousReactions;
+    let optimisticUpdateStarted = false;
+
     try {
       if (!socketClient.canSend()) {
         throw new Error('Socket not connected');
       }
+
+      previousReactions = messagesRef.current.find(
+        message => message._id === messageId
+      )?.reactions || {};
 
       // 낙관적 업데이트
       setMessages(prevMessages =>
@@ -19,12 +31,12 @@ export const useReactionHandling = ({ currentUser, messages, setMessages }) => {
             const currentUsers = currentReactions[reaction] || [];
 
             // 중복 추가 방지
-            if (!currentUsers.includes(currentUser.id)) {
+            if (!currentUsers.includes(currentUserId)) {
               return {
                 ...msg,
                 reactions: {
                   ...currentReactions,
-                  [reaction]: [...currentUsers, currentUser.id]
+                  [reaction]: [...currentUsers, currentUserId]
                 }
               };
             }
@@ -32,6 +44,7 @@ export const useReactionHandling = ({ currentUser, messages, setMessages }) => {
           return msg;
         })
       );
+      optimisticUpdateStarted = true;
 
       await socketClient.sendMessageReaction(messageId, reaction, 'add');
 
@@ -40,21 +53,30 @@ export const useReactionHandling = ({ currentUser, messages, setMessages }) => {
       Toast.error('리액션 추가에 실패했습니다.');
 
       // 실패 시 롤백
-      setMessages(prevMessages =>
-        prevMessages.map(msg =>
-          msg._id === messageId ?
-          { ...msg, reactions: messages.find(m => m._id === messageId)?.reactions || {} } :
-          msg
-        )
-      );
+      if (optimisticUpdateStarted) {
+        setMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg._id === messageId ?
+            { ...msg, reactions: previousReactions } :
+            msg
+          )
+        );
+      }
     }
-  }, [currentUser, messages, setMessages]);
+  }, [currentUserId, setMessages]);
 
   const handleReactionRemove = useCallback(async (messageId, reaction) => {
+    let previousReactions;
+    let optimisticUpdateStarted = false;
+
     try {
       if (!socketClient.canSend()) {
         throw new Error('Socket not connected');
       }
+
+      previousReactions = messagesRef.current.find(
+        message => message._id === messageId
+      )?.reactions || {};
 
       // 낙관적 업데이트
       setMessages(prevMessages =>
@@ -66,13 +88,14 @@ export const useReactionHandling = ({ currentUser, messages, setMessages }) => {
               ...msg,
               reactions: {
                 ...currentReactions,
-                [reaction]: currentUsers.filter(id => id !== currentUser.id)
+                [reaction]: currentUsers.filter(id => id !== currentUserId)
               }
             };
           }
           return msg;
         })
       );
+      optimisticUpdateStarted = true;
 
       await socketClient.sendMessageReaction(messageId, reaction, 'remove');
 
@@ -81,15 +104,17 @@ export const useReactionHandling = ({ currentUser, messages, setMessages }) => {
       Toast.error('리액션 제거에 실패했습니다.');
 
       // 실패 시 롤백
-      setMessages(prevMessages =>
-        prevMessages.map(msg =>
-          msg._id === messageId ?
-          { ...msg, reactions: messages.find(m => m._id === messageId)?.reactions || {} } :
-          msg
-        )
-      );
+      if (optimisticUpdateStarted) {
+        setMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg._id === messageId ?
+            { ...msg, reactions: previousReactions } :
+            msg
+          )
+        );
+      }
     }
-  }, [currentUser, messages, setMessages]);
+  }, [currentUserId, setMessages]);
 
   const handleReactionUpdate = useCallback(({ messageId, reactions }) => {
     setMessages(prevMessages =>

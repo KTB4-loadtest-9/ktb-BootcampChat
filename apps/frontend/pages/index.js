@@ -52,7 +52,7 @@ const Login = () => {
 
       // 리다이렉트
       const redirectUrl = router.query.redirect || '/chat';
-      router.push(redirectUrl);
+      await router.push(redirectUrl);
 
     } catch (err) {
       setError(err.message || '로그인 처리 중 오류가 발생했습니다.');
