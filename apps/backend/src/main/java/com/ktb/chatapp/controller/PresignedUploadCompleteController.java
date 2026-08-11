@@ -9,7 +9,6 @@ import com.ktb.chatapp.service.DirectImageUploadService;
 import jakarta.validation.Valid;
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -20,12 +19,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Presigned chat-image completion compatibility surface for existing E2E tests.
- * It exists only when direct upload is enabled, so local/fallback mode does not
- * require the conditional AWS upload service.
+ * Image bytes are uploaded directly to S3; this endpoint only verifies and
+ * commits the uploaded object's metadata.
  */
 @RestController
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "file.direct-upload.enabled", havingValue = "true")
 public class PresignedUploadCompleteController {
     private final DirectImageUploadService directImageUploadService;
     private final UserRepository userRepository;

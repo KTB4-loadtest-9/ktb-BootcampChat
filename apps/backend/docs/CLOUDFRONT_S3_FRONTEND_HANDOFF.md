@@ -5,8 +5,8 @@
 - 채팅 이미지와 프로필 이미지만 S3 직접 업로드 대상이다.
 - PDF 등 이미지가 아닌 파일은 기존 `POST /api/files/upload`를 계속 사용한다.
 - 기존 업로드·조회·다운로드·삭제 API는 유지된다.
-- 프런트 빌드 변수 `NEXT_PUBLIC_DIRECT_IMAGE_UPLOAD_ENABLED=true`일 때만 신규 흐름이 활성화된다.
-- 백엔드의 `DIRECT_IMAGE_UPLOAD_ENABLED=true`, `FILE_STORAGE_TYPE=s3`도 함께 설정되어야 한다.
+- 이미지 업로드는 별도 기능 플래그 없이 항상 신규 흐름을 사용한다.
+- 백엔드는 `FILE_STORAGE_TYPE=s3`와 S3·CloudFront 환경변수를 설정해야 한다.
 - 신규 흐름 실패 시 기존 업로드 API로 자동 fallback하지 않는다. 사용자가 다시 시도하게 해야 중복 객체와 중복 메시지를 방지할 수 있다.
 
 ## 2. 채팅 이미지 업로드
@@ -71,7 +71,7 @@ Authorization: Bearer <token>
 
 complete는 멱등하게 처리된다. 네트워크 타임아웃으로 응답을 못 받았다면 같은 `uploadId`로 complete만 다시 호출한다. S3 PUT부터 반복하지 않는다.
 
-현재 구현은 [fileService.js](../../frontend/services/fileService.js)에서 기능 플래그 분기, 진행률, 취소, complete 호출을 처리한다. 기존 채팅 훅과 Socket.IO 메시지 형식은 바뀌지 않는다.
+현재 구현은 [fileService.js](../../frontend/services/fileService.js)에서 진행률, 취소, complete 호출을 처리한다. 기존 채팅 훅과 Socket.IO 메시지 형식은 바뀌지 않는다.
 
 ## 3. 채팅 이미지 조회
 
@@ -112,7 +112,7 @@ Content-Type: application/json
 - 같은 렌더 사이클의 요청은 `fileService`가 microtask 단위로 묶고, 발급된 URL은 메모리에 캐시한다.
 - Signed URL을 localStorage나 영구 상태에 저장하지 않는다.
 - 권한 오류가 발생한 이미지는 placeholder와 사용자 친화적인 오류 문구로 처리한다.
-- 기존 `/api/files/view/{filename}`과 `/download/{filename}`도 유지되므로 직접 URL 기능을 끈 환경에서는 기존 경로를 사용한다.
+- 기존 `/api/files/view/{filename}`과 `/download/{filename}`도 기존 클라이언트 호환성을 위해 유지된다.
 
 ## 4. 프로필 이미지
 
@@ -150,16 +150,14 @@ presign 요청과 응답은 채팅 이미지와 동일하다. complete 성공 �
 - complete 응답 유실: 동일 `uploadId`로 complete만 다시 호출한다.
 - access-urls 일부 실패: 성공한 이미지는 표시하고 실패 항목만 placeholder 처리한다.
 - 업로드 취소 시 S3 PUT을 취소하고 메시지를 전송하지 않는다.
-- 플래그 OFF에서 이미지와 PDF가 모두 기존 API로 정상 동작하는지 확인한다.
-- 플래그 ON에서 이미지는 S3로, PDF는 기존 API로 전송되는지 Network 패널에서 확인한다.
+- 이미지는 S3로, PDF는 기존 API로 전송되는지 Network 패널에서 확인한다.
 - S3 요청에 앱 Authorization 헤더가 포함되지 않는지 확인한다.
 - 채팅방 비참가자가 Signed URL을 발급받지 못하는지 확인한다.
 
 ## 6. 배포 순서
 
 1. S3 CORS와 CloudFront 배포 동작을 준비한다.
-2. 백엔드를 `DIRECT_IMAGE_UPLOAD_ENABLED=false`로 배포한다.
-3. 프런트엔드를 `NEXT_PUBLIC_DIRECT_IMAGE_UPLOAD_ENABLED=false`로 빌드·배포한다.
-4. 테스트 환경에서 백엔드와 프런트 플래그를 함께 켠다.
-5. QA와 부하 검증 후 운영 빌드의 프런트 플래그를 켠다.
-6. 장애 시 프런트 플래그를 끈 빌드로 되돌려 기존 API를 사용한다.
+2. S3·CloudFront 환경변수와 IAM Role을 적용해 백엔드를 배포한다.
+3. 프런트엔드를 빌드·배포한다. 이미지는 항상 Presigned 경로를 사용한다.
+4. QA와 부하 검증 후 운영에 반영한다.
+5. 장애 시 이전 애플리케이션 버전으로 롤백한다.

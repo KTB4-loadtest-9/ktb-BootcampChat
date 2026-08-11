@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -40,7 +39,6 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "file.direct-upload.enabled", havingValue = "true")
 public class DirectImageUploadService {
     private final S3Client s3;
     private final S3Presigner presigner;

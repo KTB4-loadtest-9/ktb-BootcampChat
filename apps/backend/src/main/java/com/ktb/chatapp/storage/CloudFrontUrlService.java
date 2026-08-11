@@ -7,7 +7,6 @@ import java.time.Duration;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.cloudfront.CloudFrontUtilities;
 import software.amazon.awssdk.services.cloudfront.model.CannedSignerRequest;
@@ -15,7 +14,6 @@ import org.springframework.http.ContentDisposition;
 
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "file.storage.type", havingValue = "s3")
 public class CloudFrontUrlService {
     private final CloudFrontUtilities utilities;
 

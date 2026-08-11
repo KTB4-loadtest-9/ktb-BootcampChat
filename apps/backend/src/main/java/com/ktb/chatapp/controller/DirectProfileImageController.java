@@ -10,7 +10,6 @@ import com.ktb.chatapp.service.DirectImageUploadService;
 import jakarta.validation.Valid;
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,7 +20,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/users/profile-image")
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "file.direct-upload.enabled", havingValue = "true")
 public class DirectProfileImageController {
     private final DirectImageUploadService service;
     private final UserRepository users;

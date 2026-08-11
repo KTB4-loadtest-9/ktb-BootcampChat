@@ -12,7 +12,6 @@ import com.ktb.chatapp.service.DirectImageUploadService;
 import jakarta.validation.Valid;
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/files/chat-images")
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "file.direct-upload.enabled", havingValue = "true")
 public class DirectChatImageController {
     private final DirectImageUploadService service;
     private final UserRepository users;

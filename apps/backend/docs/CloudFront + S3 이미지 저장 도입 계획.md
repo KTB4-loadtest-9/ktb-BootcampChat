@@ -5,7 +5,7 @@
 - 채팅과 프로필 이미지 본문을 백엔드가 중계하지 않고 브라우저가 S3에 직접 업로드한다.
 - S3는 완전 비공개로 유지하고 모든 이미지 조회는 만료형 CloudFront Signed URL로 제한한다.
 - DB에는 공개 URL이나 서명 URL이 아닌 object key만 저장한다.
-- 기존 업로드 API와 로컬 저장 모드는 기능 플래그 OFF 시 fallback으로 유지한다.
+- 기존 multipart 업로드 API는 PDF와 기존 클라이언트 호환성을 위해 유지한다.
 
 ## 데이터 흐름
 
@@ -24,7 +24,7 @@ POST /api/files/upload
 ```
 
 - JSON 계약은 이미지 본문을 받지 않고 S3 검증과 `File` 메타데이터 확정만 수행한다.
-- 기존 multipart `/api/files/upload`는 PDF와 기능 플래그 OFF fallback으로 계속 유지한다.
+- 기존 multipart `/api/files/upload`는 PDF와 기존 클라이언트 호환성을 위해 계속 유지한다.
 - 기존 전용 `/api/files/chat-images/{uploadId}/complete`도 호환성을 위해 유지한다.
 
 ### 조회
@@ -44,7 +44,7 @@ POST /api/files/upload
 
 ## 프런트 변경
 
-- `NEXT_PUBLIC_DIRECT_IMAGE_UPLOAD_ENABLED=true`일 때 이미지에 presign → PUT → complete 흐름을 사용한다.
+- 이미지는 별도 기능 플래그 없이 항상 presign → PUT → complete 흐름을 사용한다.
 - PDF는 기존 백엔드 업로드 API를 유지한다.
 - `profileImageService`가 아바타 URL 요청을 렌더 사이클 단위로 묶고 메모리에 캐시한다.
 - `CustomAvatar`는 사용자 응답의 profileImage 값을 `<img src>`로 직접 사용하지 않는다.
@@ -61,10 +61,10 @@ POST /api/files/upload
 ## 배포 및 롤백
 
 1. 비공개 S3, OAC, Signed URL behavior와 IAM을 먼저 배포한다.
-2. 백엔드를 `DIRECT_IMAGE_UPLOAD_ENABLED=false`로 배포한다.
-3. 프런트를 `NEXT_PUBLIC_DIRECT_IMAGE_UPLOAD_ENABLED=false`로 배포한다.
-4. 테스트 환경에서 두 플래그를 켜 채팅·프로필 업로드와 조회를 검증한다.
-5. 운영에서 점진 활성화하며 장애 시 프런트 플래그 OFF 빌드로 기존 업로드 흐름에 복귀한다.
+2. 아래 S3·CloudFront 환경변수와 IAM Role을 적용해 백엔드를 배포한다.
+3. 프런트를 배포하면 이미지 요청은 항상 직접 업로드 흐름을 사용한다.
+4. 테스트 환경에서 채팅·프로필 업로드와 조회를 검증한 뒤 운영에 반영한다.
+5. 장애 시에는 이전 애플리케이션 버전으로 롤백한다. 기능 플래그 기반 전환은 제공하지 않는다.
 
 ## 클라우드 배포 담당자 전달사항
 
@@ -72,7 +72,6 @@ POST /api/files/upload
 
 ```env
 FILE_STORAGE_TYPE=s3
-DIRECT_IMAGE_UPLOAD_ENABLED=true
 AWS_REGION=ap-northeast-2
 AWS_S3_BUCKET=<비공개 이미지 버킷>
 AWS_CLOUDFRONT_DOMAIN=<CloudFront 배포 도메인>
@@ -89,10 +88,9 @@ CORS_ALLOWED_ORIGINS=<실제 프런트 Origin>
 ```env
 NEXT_PUBLIC_API_URL=<외부 백엔드 API URL>
 NEXT_PUBLIC_SOCKET_URL=<외부 Socket.IO URL>
-NEXT_PUBLIC_DIRECT_IMAGE_UPLOAD_ENABLED=true
 ```
 
-- `NEXT_PUBLIC_*`는 런타임이 아니라 빌드 시 고정되므로 값을 넣은 뒤 이미지를 다시 빌드한다.
+- API와 Socket URL 같은 `NEXT_PUBLIC_*` 값은 빌드 시 고정되므로 값을 넣은 뒤 프런트를 빌드한다.
 - CloudFront private key 파일은 저장소나 일반 환경변수에 넣지 않고 Secrets Manager/SSM 또는 배포 플랫폼 secret volume으로 마운트한다.
 - EC2/ECS Role에는 대상 prefix의 `s3:PutObject`, `s3:GetObject`, `s3:HeadObject`, `s3:DeleteObject`와 해당 배포의 `cloudfront:CreateInvalidation`만 부여한다.
 - S3 bucket policy는 CloudFront OAC의 `GetObject`만 허용하고 익명 principal 및 public ACL을 금지한다.
@@ -107,4 +105,4 @@ NEXT_PUBLIC_DIRECT_IMAGE_UPLOAD_ENABLED=true
 - 채팅방 비참가자는 채팅 이미지 Signed URL을 받지 못한다.
 - Signed URL 만료 후 프런트가 새 URL을 발급받는다.
 - 프로필 교체·삭제 후 이전 URL로 객체를 조회할 수 없다.
-- 기능 플래그 OFF에서 기존 채팅 이미지, 프로필, PDF 기능이 유지된다.
+- PDF와 기존 multipart 클라이언트가 기존 `/api/files/upload` 계약을 계속 사용할 수 있다.

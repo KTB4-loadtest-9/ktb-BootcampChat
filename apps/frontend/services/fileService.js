@@ -9,7 +9,6 @@ class FileService {
     this.retryAttempts = 3;
     this.retryDelay = 1000;
     this.activeUploads = new Map();
-    this.directImageUploadEnabled = process.env.NEXT_PUBLIC_DIRECT_IMAGE_UPLOAD_ENABLED === 'true';
     this.accessUrlCache = new Map();
     this.pendingAccessUrls = new Map();
     this.accessUrlFlushScheduled = false;
@@ -79,7 +78,7 @@ class FileService {
   }
 
   async uploadFile(file, onProgress, token, sessionId) {
-    if (this.directImageUploadEnabled && file?.type?.startsWith('image/')) {
+    if (file?.type?.startsWith('image/')) {
       return this.uploadChatImageDirect(file, onProgress);
     }
     const validationResult = await this.validateFile(file);
@@ -197,7 +196,7 @@ class FileService {
   }
 
   async getAuthorizedImageUrl(file, token, sessionId) {
-    if (!this.directImageUploadEnabled || !file?._id || !file?.mimetype?.startsWith('image/')) {
+    if (!file?._id || !file?.mimetype?.startsWith('image/')) {
       return this.getPreviewUrl(file, token, sessionId, true);
     }
     const cached = this.accessUrlCache.get(file._id);

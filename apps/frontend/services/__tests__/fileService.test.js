@@ -22,11 +22,8 @@ vi.mock('../../components/Toast', () => ({
 }));
 
 describe('fileService', () => {
-  const originalDirectUploadEnabled = fileService.directImageUploadEnabled;
-
   afterEach(() => {
     vi.restoreAllMocks();
-    fileService.directImageUploadEnabled = originalDirectUploadEnabled;
   });
 
   it('handles upload size limit errors without logging console errors', () => {
@@ -45,8 +42,7 @@ describe('fileService', () => {
     expect(consoleError).not.toHaveBeenCalled();
   });
 
-  it('routes images to direct upload when enabled', async () => {
-    fileService.directImageUploadEnabled = true;
+  it('always routes images to direct upload', async () => {
     const direct = vi.spyOn(fileService, 'uploadChatImageDirect').mockResolvedValue({ success: true });
     const legacy = vi.spyOn(fileService, 'uploadFile');
     const image = { type: 'image/png', name: 'photo.png' };
@@ -56,7 +52,6 @@ describe('fileService', () => {
   });
 
   it('keeps PDFs on the existing upload API', async () => {
-    fileService.directImageUploadEnabled = true;
     const direct = vi.spyOn(fileService, 'uploadChatImageDirect').mockResolvedValue({ success: true });
     const legacy = vi.spyOn(fileService, 'uploadFile').mockResolvedValue({ success: true });
     const pdf = { type: 'application/pdf', name: 'guide.pdf' };
@@ -66,7 +61,6 @@ describe('fileService', () => {
   });
 
   it('completes a direct chat image through the legacy upload URI', async () => {
-    fileService.directImageUploadEnabled = true;
     const image = new File(['png'], 'photo.png', { type: 'image/png' });
     axiosInstance.post
       .mockResolvedValueOnce({

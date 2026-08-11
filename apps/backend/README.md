@@ -85,8 +85,8 @@ make verify-java
 
 ### S3 직접 이미지 업로드와 CloudFront
 
-기존 로컬 업로드 API는 그대로 유지됩니다. 신규 경로를 활성화하려면 비공개 S3 버킷과 CloudFront
-OAC 배포를 준비하고 `FILE_STORAGE_TYPE=s3`, `DIRECT_IMAGE_UPLOAD_ENABLED=true`, `AWS_REGION`,
+기존 multipart 업로드 API는 그대로 유지됩니다. 이미지 업로드는 항상 S3 직접 업로드 경로를 사용하므로
+비공개 S3 버킷과 CloudFront OAC 배포를 준비하고 `FILE_STORAGE_TYPE=s3`, `AWS_REGION`,
 `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DOMAIN`, `AWS_CLOUDFRONT_DISTRIBUTION_ID`,
 `AWS_CLOUDFRONT_KEY_PAIR_ID`, `AWS_CLOUDFRONT_PRIVATE_KEY_PATH`를 설정합니다. TTL은
 `DIRECT_UPLOAD_PRESIGN_TTL=PT10M`, `CLOUDFRONT_SIGNED_URL_TTL=PT5M` 형식으로 조정할 수 있습니다.

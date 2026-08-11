@@ -56,28 +56,19 @@ const ProfileImageUpload = ({ currentImage, onImageChange }) => {
         throw new Error('인증 정보가 없습니다.');
       }
 
-      let response;
-      if (process.env.NEXT_PUBLIC_DIRECT_IMAGE_UPLOAD_ENABLED === 'true') {
-        const presign = await api.post('/api/users/profile-image/presign', {
-          originalName: file.name,
-          contentType: file.type,
-          size: file.size,
-        });
-        await fetch(presign.data.uploadUrl, {
-          method: 'PUT',
-          headers: presign.data.requiredHeaders,
-          body: file,
-        }).then((result) => {
-          if (!result.ok) throw new Error('S3 이미지 업로드에 실패했습니다.');
-        });
-        response = await api.post(`/api/users/profile-image/${presign.data.uploadId}/complete`);
-      } else {
-        const formData = new FormData();
-        formData.append('profileImage', file);
-        response = await api.post('/api/users/profile-image', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-      }
+      const presign = await api.post('/api/users/profile-image/presign', {
+        originalName: file.name,
+        contentType: file.type,
+        size: file.size,
+      });
+      await fetch(presign.data.uploadUrl, {
+        method: 'PUT',
+        headers: presign.data.requiredHeaders,
+        body: file,
+      }).then((result) => {
+        if (!result.ok) throw new Error('S3 이미지 업로드에 실패했습니다.');
+      });
+      const response = await api.post(`/api/users/profile-image/${presign.data.uploadId}/complete`);
 
       const data = response.data;
 

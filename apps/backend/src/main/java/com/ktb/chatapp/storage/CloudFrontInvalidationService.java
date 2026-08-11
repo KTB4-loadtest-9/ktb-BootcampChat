@@ -4,7 +4,6 @@ import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import software.amazon.awssdk.services.cloudfront.CloudFrontClient;
 import software.amazon.awssdk.services.cloudfront.model.CreateInvalidationRequest;
 import software.amazon.awssdk.services.cloudfront.model.InvalidationBatch;
@@ -12,7 +11,6 @@ import software.amazon.awssdk.services.cloudfront.model.Paths;
 
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "file.storage.type", havingValue = "s3")
 public class CloudFrontInvalidationService {
     private final CloudFrontClient cloudFront;
     @Value("${file.cloudfront.distribution-id:}") private String distributionId;
