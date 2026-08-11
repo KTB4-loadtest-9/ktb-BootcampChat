@@ -107,6 +107,8 @@ CloudFront Signed URL 전용 동작으로 구성하며 공개 이미지 경로�
 | `SOCKETIO_STORE` | ❌ | `redisson` | Socket.IO 저장소 (`redisson` 또는 단일 노드용 `memory`) |
 | `PORT` | ❌ | `5001` | HTTP API 포트 (`server.port`) |
 | `WS_PORT` | ❌ | `5002` | Socket.IO 서버 포트             |
+| `SOCKETIO_BOSS_THREADS` | ❌ | `1` | Socket.IO 연결 수락 Netty 스레드 수 |
+| `SOCKETIO_WORKER_THREADS` | ❌ | `32` | Socket.IO I/O Netty 스레드 수 |
 | `CORS_ALLOWED_ORIGINS` | ❌ | `*` | REST API CORS 허용 Origin 목록. 쉼표로 구분 |
 | `SOCKETIO_SERVER_ORIGIN` | ❌ | `*` | Socket.IO 허용 Origin. Netty Socket.IO 설정은 단일 Origin 값을 사용 |
 | `MANAGEMENT_HEALTH_SHOW_DETAILS` | ❌ | `when_authorized` | Actuator health 상세 노출 수준 |
