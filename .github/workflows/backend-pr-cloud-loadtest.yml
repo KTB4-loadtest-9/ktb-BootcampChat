@@ -32,6 +32,7 @@ concurrency:
 
 env:
   BUILD_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+  WORKFLOW_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
   TARGET_URL: ${{ vars.LOAD_TEST_BASE_URL || 'https://goorm-ktb-009.goorm.team' }}
   BE_DEPLOY_HOSTS: ${{ vars.BE_DEPLOY_HOSTS }}
   GRAFANA_URL: ${{ vars.GRAFANA_URL }}
@@ -206,6 +207,27 @@ jobs:
         with:
           ref: ${{ env.BUILD_REF }}
           persist-credentials: false
+
+      - name: Check out trusted load-test configuration
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.WORKFLOW_REF }}
+          path: trusted-ci
+          sparse-checkout: e2e/artillery/artillery-config.ci.yaml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Install trusted load-test configuration
+        run: |
+          set -Eeuo pipefail
+          test -f trusted-ci/e2e/artillery/artillery-config.ci.yaml
+          test -d e2e/artillery
+          test ! -L e2e
+          test ! -L e2e/artillery
+          test ! -L e2e/artillery/artillery-config.ci.yaml
+          install -m 0644 \
+            trusted-ci/e2e/artillery/artillery-config.ci.yaml \
+            e2e/artillery/artillery-config.ci.yaml
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
