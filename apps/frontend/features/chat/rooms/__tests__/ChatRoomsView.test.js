@@ -144,4 +144,10 @@ describe('ChatRoomsView', () => {
 
     expect(screen.queryByTestId('refresh-rooms-button')).toBeNull();
   });
+
+  it('reserves a stable content area while the room list state changes', () => {
+    render(<ChatRoomsView router={{ push: vi.fn() }} />);
+
+    expect(screen.getByTestId('rooms-content-slot')).toBeInTheDocument();
+  });
 });

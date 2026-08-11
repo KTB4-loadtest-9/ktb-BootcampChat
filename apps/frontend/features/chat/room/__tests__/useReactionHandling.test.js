@@ -87,4 +87,30 @@ describe('useReactionHandling', () => {
     expect(socketClient.sendMessageReaction).not.toHaveBeenCalled();
     expect(Toast.error).toHaveBeenCalledWith('리액션 제거에 실패했습니다.');
   });
+
+  it('rolls back only the current user reaction when add fails', async () => {
+    let currentMessages = [{
+      _id: 'message-1',
+      reactions: { '👍': ['user-2'] },
+    }];
+    const setMessages = vi.fn(updater => {
+      currentMessages = updater(currentMessages);
+    });
+    socketClient.sendMessageReaction.mockImplementation(async () => {
+      currentMessages = currentMessages.map(message => ({
+        ...message,
+        reactions: { '👍': [...message.reactions['👍'], 'user-3'] },
+      }));
+      throw new Error('send failed');
+    });
+    const { result } = renderHook(() =>
+      useReactionHandling({ currentUser, messages: currentMessages, setMessages })
+    );
+
+    await act(async () => {
+      await result.current.handleReactionAdd('message-1', '👍');
+    });
+
+    expect(currentMessages[0].reactions['👍']).toEqual(['user-2', 'user-3']);
+  });
 });

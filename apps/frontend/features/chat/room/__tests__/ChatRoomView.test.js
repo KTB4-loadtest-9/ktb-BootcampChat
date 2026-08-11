@@ -64,5 +64,7 @@ describe('ChatRoomView', () => {
     expect(screen.getByText('chat messages')).toBeInTheDocument();
     expect(screen.getByText('room info: disconnected')).toBeInTheDocument();
     expect(screen.queryByText(/연결이 끊어졌습니다/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat-room-header-slot')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-room-input-slot')).toBeInTheDocument();
   });
 });

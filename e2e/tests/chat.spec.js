@@ -127,7 +127,7 @@ test.describe.serial('채팅 E2E 테스트', () => {
       const forbiddenMessage = getRandomForbiddenWord();
 
       // 금칙어 메시지 전송 시도
-      await sendMessageAction(page, forbiddenMessage);
+      await sendMessageAction(page, forbiddenMessage, { expectFailure: true });
 
       // 에러 토스트 표시 확인
       // toast-error 는 연결 끊김·업로드 실패 등 15곳이 공유하는 범용 testid 라
