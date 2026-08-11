@@ -10,6 +10,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
@@ -60,9 +61,16 @@ public class ConnectionLoginHandler {
         String userId = user.id();
         
         try {
-            // 다른 노드에 접속된 사용자는 통보 불가
-            notifyDuplicateLogin(client, userId);
+            // 인증 직후의 이벤트 핸들러에서 항상 사용자 정보를 조회할 수 있어야 한다.
             client.set("user", user);
+
+            // 다른 노드에 접속된 사용자는 통보 불가
+            try {
+                notifyDuplicateLogin(client, userId);
+            } catch (Exception e) {
+                // 중복 로그인 알림 실패가 현재 연결의 인증을 무효화해서는 안 된다.
+                log.warn("Failed to notify duplicate Socket.IO login for user {}", userId, e);
+            }
             
             // 재접속 시 기존 참여 방을 한 번에 검증하고 재입장 처리
             roomJoinHandler.handleReconnectRooms(client, userRooms.get(userId));
@@ -146,11 +154,16 @@ public class ConnectionLoginHandler {
         if (existingClient == null) {
             return;
         }
+
+        String deviceInfo = Objects.toString(
+                client.getHandshakeData().getHttpHeaders().get("User-Agent"),
+                "unknown"
+        );
         
         // Send duplicate login notification
         existingClient.sendEvent(DUPLICATE_LOGIN, Map.of(
                 "type", "new_login_attempt",
-                "deviceInfo", client.getHandshakeData().getHttpHeaders().get("User-Agent"),
+                "deviceInfo", deviceInfo,
                 "ipAddress", client.getRemoteAddress().toString(),
                 "timestamp", System.currentTimeMillis()
         ));
