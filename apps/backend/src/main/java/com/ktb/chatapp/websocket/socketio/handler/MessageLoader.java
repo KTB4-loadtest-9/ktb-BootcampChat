@@ -24,8 +24,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
-import static java.util.Collections.emptyList;
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -42,15 +40,7 @@ public class MessageLoader {
      * 메시지 로드
      */
     public FetchMessagesResponse loadMessages(FetchMessagesRequest data, String userId) {
-        try {
-            return loadMessagesInternal(data.roomId(), data.limit(BATCH_SIZE), data.before(LocalDateTime.now()), userId);
-        } catch (Exception e) {
-            log.error("Error loading initial messages for room {}", data.roomId(), e);
-            return FetchMessagesResponse.builder()
-                    .messages(emptyList())
-                    .hasMore(false)
-                    .build();
-        }
+        return loadMessagesInternal(data.roomId(), data.limit(BATCH_SIZE), data.before(LocalDateTime.now()), userId);
     }
 
     private FetchMessagesResponse loadMessagesInternal(

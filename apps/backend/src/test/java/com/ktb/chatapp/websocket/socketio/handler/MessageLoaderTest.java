@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -190,16 +191,16 @@ class MessageLoaderTest {
     }
     
     @Test
-    @DisplayName("loadInitialMessages: 에러 시 빈 응답")
-    void loadInitialMessages_shouldReturnEmptyOnError() {
+    @DisplayName("loadInitialMessages: 에러를 호출자에게 전달")
+    void loadInitialMessages_shouldPropagateError() {
         when(messageRepository.findByRoomIdAndTimestampBefore(
                 any(), any(LocalDateTime.class), any(Pageable.class)))
                 .thenThrow(new RuntimeException("DB error"));
-        
+
         FetchMessagesRequest req = new FetchMessagesRequest(roomId, 30, null);
-        FetchMessagesResponse result = messageLoader.loadMessages(req, userId);
-        
-        assertThat(result.getMessages()).isEmpty();
-        assertThat(result.isHasMore()).isFalse();
+
+        assertThatThrownBy(() -> messageLoader.loadMessages(req, userId))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("DB error");
     }
 }

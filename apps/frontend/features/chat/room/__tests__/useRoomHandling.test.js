@@ -208,11 +208,7 @@ describe('useRoomHandling', () => {
       },
     });
     socketClient.connect.mockResolvedValue(createSocket());
-    socketClient.joinRoomAndWait.mockResolvedValue({
-      roomId: 'room-1',
-      messages: [{ _id: 'join-message-1', timestamp: '2026-07-07T00:00:00.000Z' }],
-      hasMore: false,
-    });
+    socketClient.joinRoomAndWait.mockResolvedValue({ roomId: 'room-1' });
     socketClient.fetchPreviousMessagesAndWait.mockResolvedValue({
       messages: [{ _id: 'message-1', timestamp: '2026-07-07T00:00:00.000Z' }],
       hasMore: false,
@@ -261,11 +257,15 @@ describe('useRoomHandling', () => {
       }),
     );
     expect(socketClient.joinRoomAndWait).toHaveBeenCalledWith('room-1', harness.socketRef.current);
-    expect(socketClient.fetchPreviousMessagesAndWait).not.toHaveBeenCalled();
+    expect(socketClient.fetchPreviousMessagesAndWait).toHaveBeenCalledWith(
+      { roomId: 'room-1', limit: 30 },
+      harness.socketRef.current,
+      expect.objectContaining({ timeoutMs: 5000 }),
+    );
     expect(harness.setters.setMessages).toHaveBeenCalledWith(expect.any(Function));
     expect(harness.setters.setHasMoreMessages).toHaveBeenCalledWith(false);
     expect(harness.initialLoadCompletedRef.current).toBe(true);
-    expect(harness.processedMessageIds.current.has('join-message-1')).toBe(true);
+    expect(harness.processedMessageIds.current.has('message-1')).toBe(true);
     expect(harness.actions.setupStarted).toHaveBeenCalledTimes(1);
     expect(harness.actions.setupSucceeded).toHaveBeenCalledWith(
       expect.objectContaining({ _id: 'room-1' }),
@@ -274,8 +274,12 @@ describe('useRoomHandling', () => {
     expect(harness.setupCompleteRef.current).toBe(true);
   });
 
-  it('falls back to fetching previous messages when join response has no messages', async () => {
-    socketClient.joinRoomAndWait.mockResolvedValueOnce({ roomId: 'room-1' });
+  it('waits for previous messages even when join response includes legacy messages', async () => {
+    socketClient.joinRoomAndWait.mockResolvedValueOnce({
+      roomId: 'room-1',
+      messages: [{ _id: 'legacy-message-1' }],
+      hasMore: false,
+    });
     const harness = createHarness();
 
     await act(async () => {
@@ -287,6 +291,24 @@ describe('useRoomHandling', () => {
       harness.socketRef.current,
       expect.objectContaining({ timeoutMs: 5000 }),
     );
+  });
+
+  it('loads previous messages after a reconnect join response has no messages', async () => {
+    socketClient.joinRoomAndWait.mockResolvedValueOnce({ roomId: 'room-1' });
+    const harness = createHarness();
+    harness.socketRef.current = createSocket();
+
+    await act(async () => {
+      await harness.result.current.rejoinRoom();
+    });
+
+    expect(socketClient.fetchPreviousMessagesAndWait).toHaveBeenCalledWith(
+      { roomId: 'room-1', limit: 30 },
+      harness.socketRef.current,
+      expect.objectContaining({ timeoutMs: 5000 }),
+    );
+    expect(harness.initialLoadCompletedRef.current).toBe(true);
+    expect(harness.setupCompleteRef.current).toBe(true);
   });
 
   it('records setup failure through semantic reducer actions', async () => {
