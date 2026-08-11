@@ -46,9 +46,9 @@ public class SocketIOConfig {
     @Bean(destroyMethod = "shutdown")
     @ConditionalOnProperty(name = "socketio.store", havingValue = "redisson", matchIfMissing = true)
     public RedissonClient socketIORedissonClient(
-            @Value("${spring.data.redis.host:localhost}") String redisHost,
-            @Value("${spring.data.redis.port:6379}") int redisPort,
-            @Value("${spring.data.redis.password:}") String redisPassword) {
+            @Value("${socketio.redis.host:localhost}") String redisHost,
+            @Value("${socketio.redis.port:6379}") int redisPort,
+            @Value("${socketio.redis.password:}") String redisPassword) {
         Config config = new Config();
         var server = config.useSingleServer()
                 .setAddress("redis://%s:%d".formatted(redisHost, redisPort));
