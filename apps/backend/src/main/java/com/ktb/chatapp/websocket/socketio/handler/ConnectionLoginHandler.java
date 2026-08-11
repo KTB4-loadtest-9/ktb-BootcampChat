@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.corundumstudio.socketio.BroadcastOperations;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
 import com.corundumstudio.socketio.annotation.OnDisconnect;
@@ -12,7 +13,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -64,23 +64,25 @@ public class ConnectionLoginHandler {
             // 인증 직후의 이벤트 핸들러에서 항상 사용자 정보를 조회할 수 있어야 한다.
             client.set("user", user);
 
-            // 다른 노드에 접속된 사용자는 통보 불가
-            try {
-                notifyDuplicateLogin(client, userId);
-            } catch (Exception e) {
-                // 중복 로그인 알림 실패가 현재 연결의 인증을 무효화해서는 안 된다.
-                log.warn("Failed to notify duplicate Socket.IO login for user {}", userId, e);
-            }
-            
-            // 재접속 시 기존 참여 방을 한 번에 검증하고 재입장 처리
-            roomJoinHandler.handleReconnectRooms(client, userRooms.get(userId));
-            
-            connectedUsers.set(userId, user);
+            connectedUsers.withUserLock(userId, () -> {
+                // Redis-backed socket room을 통해 다른 노드의 기존 연결에도 알린다.
+                try {
+                    notifyDuplicateLogin(client, userId);
+                } catch (Exception e) {
+                    // 중복 로그인 알림 실패가 현재 연결의 인증을 무효화해서는 안 된다.
+                    log.warn("Failed to notify duplicate Socket.IO login for user {}", userId, e);
+                }
 
-            log.info("Socket.IO user connected: {} ({}) - Total concurrent users: {}",
-                    getUserName(client), userId, connectedUsers.size());
+                connectedUsers.set(userId, user);
 
-            client.joinRooms(Set.of("user:" + userId, "room-list"));
+                // 재접속 시 기존 참여 방을 한 번에 검증하고 재입장 처리
+                roomJoinHandler.handleReconnectRooms(client, userRooms.get(userId));
+
+                log.info("Socket.IO user connected: {} ({}) - Total concurrent users: {}",
+                        getUserName(client), userId, connectedUsers.size());
+
+                client.joinRooms(Set.of(socketRoom(user.socketId()), "user:" + userId, "room-list"));
+            });
             
         } catch (Exception e) {
             log.error("Error handling Socket.IO connection", e);
@@ -100,18 +102,21 @@ public class ConnectionLoginHandler {
                 return;
             }
             
-            roomLeaveHandler.handleDisconnectRooms(client, userRooms.get(userId));
             String socketId = client.getSessionId().toString();
-            
-            // 해당 사용자의 현재 활성 연결인 경우에만 정리
-            var socketUser = connectedUsers.get(userId);
-            if (socketUser != null && socketId.equals(socketUser.socketId())) {
-                connectedUsers.del(userId);
-            } else {
-                log.warn("Socket.IO disconnect: User {} has a different active connection. Skipping cleanup.", userId);
-            }
 
-            client.leaveRooms(Set.of("user:" + userId, "room-list"));
+            connectedUsers.withUserLock(userId, () -> {
+                // 해당 사용자의 현재 활성 연결인 경우에만 정리
+                var socketUser = connectedUsers.get(userId);
+                boolean currentConnection = socketUser == null || socketId.equals(socketUser.socketId());
+                if (currentConnection) {
+                    roomLeaveHandler.handleDisconnectRooms(client, userRooms.get(userId));
+                    connectedUsers.del(userId);
+                } else {
+                    log.warn("Socket.IO disconnect: User {} has a different active connection. Skipping cleanup.", userId);
+                }
+            });
+
+            client.leaveRooms(Set.of(socketRoom(socketId), "user:" + userId, "room-list"));
             client.del("user");
             client.disconnect();
 
@@ -141,27 +146,23 @@ public class ConnectionLoginHandler {
     }
     
     /**
-     * TODO 멀티 클러스터에서 동작 안함
-     * socketIOServer.getRoomOperations("user:" + userId) 로 처리 변경.
+     * The user room is backed by the distributed Socket.IO store, so this also
+     * reaches the active connection when it belongs to another backend node.
      */
     private void notifyDuplicateLogin(SocketIOClient client, String userId) {
         var socketUser = connectedUsers.get(userId);
         if (socketUser == null) {
             return;
         }
-        String existingSocketId = socketUser.socketId();
-        SocketIOClient existingClient = socketIOServer.getClient(UUID.fromString(existingSocketId));
-        if (existingClient == null) {
-            return;
-        }
-
+        BroadcastOperations userOperations =
+                socketIOServer.getRoomOperations(socketRoom(socketUser.socketId()));
         String deviceInfo = Objects.toString(
                 client.getHandshakeData().getHttpHeaders().get("User-Agent"),
                 "unknown"
         );
-        
+
         // Send duplicate login notification
-        existingClient.sendEvent(DUPLICATE_LOGIN, Map.of(
+        userOperations.sendEvent(DUPLICATE_LOGIN, Map.of(
                 "type", "new_login_attempt",
                 "deviceInfo", deviceInfo,
                 "ipAddress", client.getRemoteAddress().toString(),
@@ -171,7 +172,7 @@ public class ConnectionLoginHandler {
         Thread.ofVirtual().name("duplicate-login-notification").start(() -> {
             try {
                 Thread.sleep(Duration.ofSeconds(10));
-                existingClient.sendEvent(SESSION_ENDED, Map.of(
+                userOperations.sendEvent(SESSION_ENDED, Map.of(
                         "reason", "duplicate_login",
                         "message", "다른 기기에서 로그인하여 현재 세션이 종료되었습니다."
                 ));
@@ -180,5 +181,9 @@ public class ConnectionLoginHandler {
                 log.error("Error in duplicate login notification thread", e);
             }
         });
+    }
+
+    private String socketRoom(String socketId) {
+        return "socket:" + socketId;
     }
 }
