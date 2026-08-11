@@ -2,6 +2,33 @@ import { useState, useCallback, useRef } from 'react';
 import axiosInstance from '@/services/axios';
 import { CONNECTION_STATUS } from './useServerConnection';
 
+export const ROOM_PAGE_SIZE = 20;
+
+export const mergeRoomPage = (currentRooms, nextRooms) => {
+  const mergedRooms = [...currentRooms];
+  const indexes = new Map(
+    mergedRooms
+      .map((room, index) => [room?._id, index])
+      .filter(([roomId]) => roomId)
+  );
+
+  nextRooms.forEach((room) => {
+    const roomId = room?._id;
+    if (!roomId) {
+      mergedRooms.push(room);
+      return;
+    }
+
+    const existingIndex = indexes.get(roomId);
+    if (existingIndex === undefined) {
+      indexes.set(roomId, mergedRooms.length);
+      mergedRooms.push(room);
+    }
+  });
+
+  return mergedRooms;
+};
+
 export const useRoomList = ({
   currentUser,
   router,
@@ -13,11 +40,22 @@ export const useRoomList = ({
   const [rooms, setRooms] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [joiningRoom, setJoiningRoom] = useState(false);
+  const [metadata, setMetadata] = useState(null);
 
   const isLoadingRef = useRef(false);
+  const metadataRef = useRef(null);
+
+  const updateMetadata = useCallback((updater) => {
+    const currentMetadata = metadataRef.current;
+    const nextMetadata =
+      typeof updater === 'function' ? updater(currentMetadata) : updater;
+    metadataRef.current = nextMetadata;
+    setMetadata(nextMetadata);
+  }, []);
 
   const handleFetchError = useCallback((error) => {
     let errorMessage = '채팅방 목록을 불러오는데 실패했습니다.';
@@ -56,17 +94,25 @@ export const useRoomList = ({
     setConnectionStatus(CONNECTION_STATUS.ERROR);
   }, [isRetrying, setConnectionStatus]);
 
-  const loadRooms = useCallback(async () => {
+  const loadRooms = useCallback(async ({ page = 0, append = false } = {}) => {
     await attemptConnection();
 
-    const response = await axiosInstance.get('/api/rooms');
+    const response = await axiosInstance.get('/api/rooms', {
+      params: { page, pageSize: ROOM_PAGE_SIZE },
+    });
 
     if (!response?.data?.data) {
       throw new Error('INVALID_RESPONSE');
     }
 
-    setRooms(response.data.data);
-  }, [attemptConnection]);
+    const nextRooms = response.data.data;
+    const nextMetadata = response.data.metadata ?? null;
+
+    setRooms((currentRooms) =>
+      append ? mergeRoomPage(currentRooms, nextRooms) : nextRooms
+    );
+    updateMetadata(nextMetadata);
+  }, [attemptConnection, updateMetadata]);
 
   const fetchRooms = useCallback(async () => {
     if (!currentUser?.token || isLoadingRef.current) {
@@ -79,7 +125,7 @@ export const useRoomList = ({
       setLoading(true);
       setError(null);
 
-      await loadRooms();
+      await loadRooms({ page: 0 });
 
       if (isInitialLoad) {
         setIsInitialLoad(false);
@@ -105,7 +151,7 @@ export const useRoomList = ({
       isLoadingRef.current = true;
       setRefreshing(true);
 
-      await loadRooms();
+      await loadRooms({ page: 0 });
       setError(null);
 
       return true;
@@ -125,6 +171,31 @@ export const useRoomList = ({
       isLoadingRef.current = false;
     }
   }, [currentUser, loadRooms]);
+
+  const loadMoreRooms = useCallback(async () => {
+    const currentMetadata = metadataRef.current;
+    if (
+      !currentUser?.token ||
+      !currentMetadata?.hasMore ||
+      isLoadingRef.current
+    ) {
+      return false;
+    }
+
+    try {
+      isLoadingRef.current = true;
+      setLoadingMore(true);
+      await loadRooms({ page: currentMetadata.page + 1, append: true });
+      setError(null);
+      return true;
+    } catch (error) {
+      handleFetchError(error);
+      return false;
+    } finally {
+      setLoadingMore(false);
+      isLoadingRef.current = false;
+    }
+  }, [currentUser, handleFetchError, loadRooms]);
 
   const handleJoinRoom = useCallback(async (roomId) => {
     if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
@@ -167,10 +238,14 @@ export const useRoomList = ({
     setRooms,
     error,
     setError,
+    setMetadata: updateMetadata,
     loading,
+    loadingMore,
     refreshing,
+    metadata,
     joiningRoom,
     fetchRooms,
+    loadMoreRooms,
     refreshRooms,
     handleJoinRoom,
   };

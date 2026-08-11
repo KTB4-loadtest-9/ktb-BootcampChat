@@ -42,11 +42,15 @@ export default function ChatRoomsView({ router }) {
   const {
     rooms,
     setRooms,
+    setMetadata,
     error,
     loading,
+    loadingMore,
     refreshing,
+    metadata,
     joiningRoom,
     fetchRooms,
+    loadMoreRooms,
     refreshRooms,
     handleJoinRoom,
   } = useRoomList({
@@ -134,7 +138,7 @@ export default function ChatRoomsView({ router }) {
     };
   }, [currentUserKey, connectionStatus]);
 
-  useRoomsSocket({ currentUser, setConnectionStatus, setRooms });
+  useRoomsSocket({ currentUser, setConnectionStatus, rooms, setRooms, setMetadata });
 
   return (
     <Box
@@ -248,6 +252,17 @@ export default function ChatRoomsView({ router }) {
               새 채팅방 만들기
             </Button>
           </VStack>
+        )}
+
+        {rooms.length > 0 && metadata?.hasMore && (
+          <Button
+            variant="outline"
+            onClick={loadMoreRooms}
+            disabled={loadingMore}
+            data-testid="load-more-rooms-button"
+          >
+            {loadingMore ? '불러오는 중' : '더 보기'}
+          </Button>
         )}
       </VStack>
     </Box>

@@ -63,7 +63,7 @@ class MessageReadHandlerTest {
         handler.handleMarkAsRead(client, request);
 
         verify(client).sendEvent(eq(ERROR), any());
-        verify(messageReadStatusService, never()).updateReadStatus(any(), any());
+        verify(messageReadStatusService, never()).updateReadStatus(any(), any(), any());
     }
 
     @Test
@@ -75,18 +75,44 @@ class MessageReadHandlerTest {
 
         when(client.get("user"))
                 .thenReturn(new SocketUser("user-1", "tester", "session-1", "socket-1"));
-        when(messageRepository.findById("message-1")).thenReturn(Optional.of(message));
+        when(messageRepository.findAllById(List.of("message-1"))).thenReturn(List.of(message));
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
         when(roomRepository.findById("room-1")).thenReturn(Optional.of(room));
         when(socketIOServer.getRoomOperations("room-1")).thenReturn(roomOperations);
 
         handler.handleMarkAsRead(client, request);
 
-        verify(messageReadStatusService).updateReadStatus(List.of("message-1"), "user-1");
+        verify(messageReadStatusService).updateReadStatus(List.of("message-1"), "user-1", "room-1");
         ArgumentCaptor<Object> responseCaptor = ArgumentCaptor.forClass(Object.class);
         verify(roomOperations).sendEvent(eq(MESSAGES_READ), responseCaptor.capture());
         MessagesReadResponse response = (MessagesReadResponse) responseCaptor.getValue();
         assertEquals("user-1", response.getUserId());
+        assertEquals(List.of("message-1"), response.getMessageIds());
+    }
+
+    @Test
+    void handleMarkAsRead_filtersDuplicatesMissingMessagesAndOtherRooms() {
+        MarkAsReadRequest request = new MarkAsReadRequest();
+        request.setMessageIds(List.of("missing", "message-1", "message-1", "message-2"));
+        Message roomMessage = Message.builder().id("message-1").roomId("room-1").build();
+        Message otherRoomMessage = Message.builder().id("message-2").roomId("room-2").build();
+        Room room = Room.builder().id("room-1").participantIds(Set.of("user-1")).build();
+        User user = User.builder().id("user-1").name("tester").email("tester@example.com").build();
+
+        when(client.get("user"))
+                .thenReturn(new SocketUser("user-1", "tester", "session-1", "socket-1"));
+        when(messageRepository.findAllById(List.of("missing", "message-1", "message-2")))
+                .thenReturn(List.of(roomMessage, otherRoomMessage));
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+        when(roomRepository.findById("room-1")).thenReturn(Optional.of(room));
+        when(socketIOServer.getRoomOperations("room-1")).thenReturn(roomOperations);
+
+        handler.handleMarkAsRead(client, request);
+
+        verify(messageReadStatusService).updateReadStatus(List.of("message-1"), "user-1", "room-1");
+        ArgumentCaptor<Object> responseCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(roomOperations).sendEvent(eq(MESSAGES_READ), responseCaptor.capture());
+        MessagesReadResponse response = (MessagesReadResponse) responseCaptor.getValue();
         assertEquals(List.of("message-1"), response.getMessageIds());
     }
 

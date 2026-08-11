@@ -32,6 +32,10 @@ public class RecentMessageCounter {
     }
 
     public Map<String, Integer> countRecentMessagesByRoomIds(Collection<String> roomIds) {
+        if (roomIds == null || roomIds.isEmpty()) {
+            return Map.of();
+        }
+
         var distinctRoomIds = roomIds.stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());

@@ -112,6 +112,67 @@ describe('roomEventHandlers', () => {
     expect(committed.map(message => message._id)).toEqual(['message-live']);
   });
 
+  it('deduplicates the same message when history and live events arrive in either order', () => {
+    const createMessageFlow = () => {
+      const processedMessageIds = { current: new Set() };
+      const initialLoadCompletedRef = { current: false };
+      const messageProcessingRef = { current: false };
+      let messages = [];
+      const setMessages = vi.fn(updater => {
+        messages = updater(messages);
+      });
+      const setHasMoreMessages = vi.fn();
+
+      const handlers = createRoomEventHandlers({
+        mountedRef: { current: true },
+        messageProcessingRef,
+        processedMessageIds,
+        initialLoadCompletedRef,
+        processMessages: (loadedMessages, hasMore, isInitialLoad) =>
+          processLoadedRoomMessages({
+            loadedMessages,
+            hasMore,
+            isInitialLoad,
+            processedMessageIds,
+            setMessages,
+            setHasMoreMessages,
+            initialLoadCompletedRef,
+          }),
+        setRoom: vi.fn(),
+        setMessages,
+        setLoadingMessages: vi.fn(),
+        setError: vi.fn(),
+        setHasMoreMessages,
+        cleanup: vi.fn(),
+        logout: vi.fn(),
+        onReplace: vi.fn(),
+        handleReactionUpdate: vi.fn(),
+        showRejectedMessage: vi.fn(),
+      });
+
+      return { handlers, getMessages: () => messages };
+    };
+
+    const historyFirst = createMessageFlow();
+    const historyMessage = { _id: 'same-message', timestamp: '2026-07-07T00:00:00.000Z' };
+    historyFirst.handlers.onPreviousMessagesLoaded({
+      messages: [historyMessage],
+      hasMore: false,
+    });
+    historyFirst.handlers.onMessage(historyMessage);
+
+    const liveFirst = createMessageFlow();
+    const liveMessage = { _id: 'same-message', timestamp: '2026-07-07T00:00:00.000Z' };
+    liveFirst.handlers.onMessage(liveMessage);
+    liveFirst.handlers.onPreviousMessagesLoaded({
+      messages: [liveMessage],
+      hasMore: false,
+    });
+
+    expect(historyFirst.getMessages()).toHaveLength(1);
+    expect(liveFirst.getMessages()).toHaveLength(1);
+  });
+
   it('creates room event handlers with mounted and processing guards', () => {
     const mountedRef = { current: true };
     const messageProcessingRef = { current: false };

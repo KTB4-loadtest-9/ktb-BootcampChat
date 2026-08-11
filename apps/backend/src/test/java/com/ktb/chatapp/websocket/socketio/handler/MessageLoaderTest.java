@@ -2,6 +2,7 @@ package com.ktb.chatapp.websocket.socketio.handler;
 
 import com.ktb.chatapp.dto.FetchMessagesRequest;
 import com.ktb.chatapp.dto.FetchMessagesResponse;
+import com.ktb.chatapp.model.File;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.FileRepository;
@@ -26,6 +27,7 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -82,7 +84,7 @@ class MessageLoaderTest {
         
         lenient().when(userRepository.findAllById(anySet()))
                 .thenReturn(List.of(testUser));
-        lenient().doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString());
+        lenient().doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString(), anyString());
     }
     
     private Message createMessage(String id, LocalDateTime timestamp) {
@@ -156,6 +158,32 @@ class MessageLoaderTest {
     }
 
     @Test
+    @DisplayName("loadMessages: 파일 정보는 메시지별 조회 없이 batch 조회")
+    void loadMessages_shouldBatchLoadFiles() {
+        Message firstMessage = createMessage("message-1", LocalDateTime.now().minusMinutes(2));
+        firstMessage.setFileId("file-1");
+        Message secondMessage = createMessage("message-2", LocalDateTime.now().minusMinutes(1));
+        secondMessage.setFileId("file-2");
+
+        Pageable pageable = PageRequest.of(0, 30, Sort.by("timestamp").descending());
+        when(messageRepository.findByRoomIdAndTimestampBefore(
+                eq(roomId), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(List.of(secondMessage, firstMessage), pageable, false));
+        when(fileRepository.findAllById(any())).thenReturn(List.of(
+                File.builder().id("file-1").filename("one.txt").build(),
+                File.builder().id("file-2").filename("two.txt").build()));
+
+        FetchMessagesResponse result = messageLoader.loadMessages(
+                new FetchMessagesRequest(roomId, 30, null), userId);
+
+        assertThat(result.getMessages())
+                .extracting(response -> response.getFile().getId())
+                .containsExactly("file-1", "file-2");
+        verify(fileRepository).findAllById(any());
+        verify(fileRepository, never()).findById(anyString());
+    }
+
+    @Test
     @DisplayName("loadMessages: senderId를 중복 제거해 배치 조회하고 없는 sender는 비워 둔다")
     void loadMessages_shouldBatchLoadDistinctSendersAndKeepMissingSendersNull() {
         Message first = createMessage("first", LocalDateTime.now().minusHours(2));
@@ -194,16 +222,16 @@ class MessageLoaderTest {
     }
     
     @Test
-    @DisplayName("loadInitialMessages: 에러 시 빈 응답")
-    void loadInitialMessages_shouldReturnEmptyOnError() {
+    @DisplayName("loadInitialMessages: 에러를 호출자에게 전달")
+    void loadInitialMessages_shouldPropagateError() {
         when(messageRepository.findByRoomIdAndTimestampBefore(
                 any(), any(LocalDateTime.class), any(Pageable.class)))
                 .thenThrow(new RuntimeException("DB error"));
-        
+
         FetchMessagesRequest req = new FetchMessagesRequest(roomId, 30, null);
-        FetchMessagesResponse result = messageLoader.loadMessages(req, userId);
-        
-        assertThat(result.getMessages()).isEmpty();
-        assertThat(result.isHasMore()).isFalse();
+
+        assertThatThrownBy(() -> messageLoader.loadMessages(req, userId))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("DB error");
     }
 }

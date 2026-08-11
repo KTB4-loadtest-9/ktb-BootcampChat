@@ -3,6 +3,7 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.ktb.chatapp.dto.FetchMessagesRequest;
 import com.ktb.chatapp.dto.FetchMessagesResponse;
 import com.ktb.chatapp.dto.MessageResponse;
+import com.ktb.chatapp.model.File;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.MessageRepository;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -21,8 +23,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
-
-import static java.util.Collections.emptyList;
 
 @Slf4j
 @Component
@@ -40,15 +40,7 @@ public class MessageLoader {
      * 메시지 로드
      */
     public FetchMessagesResponse loadMessages(FetchMessagesRequest data, String userId) {
-        try {
-            return loadMessagesInternal(data.roomId(), data.limit(BATCH_SIZE), data.before(LocalDateTime.now()), userId);
-        } catch (Exception e) {
-            log.error("Error loading initial messages for room {}", data.roomId(), e);
-            return FetchMessagesResponse.builder()
-                    .messages(emptyList())
-                    .hasMore(false)
-                    .build();
-        }
+        return loadMessagesInternal(data.roomId(), data.limit(BATCH_SIZE), data.before(LocalDateTime.now()), userId);
     }
 
     private FetchMessagesResponse loadMessagesInternal(
@@ -67,7 +59,13 @@ public class MessageLoader {
         List<Message> sortedMessages = messages.reversed();
         
         var messageIds = sortedMessages.stream().map(Message::getId).toList();
-        messageReadStatusService.updateReadStatus(messageIds, userId);
+        messageReadStatusService.updateReadStatus(messageIds, userId, roomId);
+
+        Set<String> fileIds = sortedMessages.stream()
+                .map(Message::getFileId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<String, File> filesById = messageResponseMapper.findFilesByIds(fileIds);
         
         Set<String> senderIds = sortedMessages.stream()
                 .map(Message::getSenderId)
@@ -82,7 +80,7 @@ public class MessageLoader {
         // 메시지 응답 생성
         List<MessageResponse> messageResponses = sortedMessages.stream()
                 .map(message -> messageResponseMapper.mapToMessageResponse(
-                        message, usersById.get(message.getSenderId())))
+                        message, usersById.get(message.getSenderId()), filesById))
                 .toList();
 
         boolean hasMore = messagePage.hasNext();
