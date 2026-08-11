@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.ktb.chatapp.cache.MessagePageCache;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
 import com.corundumstudio.socketio.annotation.OnEvent;
@@ -28,6 +29,7 @@ public class MessageReactionHandler {
     
     private final SocketIOServer socketIOServer;
     private final MessageRepository messageRepository;
+    private final MessagePageCache messagePageCache;
     
     @OnEvent(MESSAGE_REACTION)
     public void handleMessageReaction(SocketIOClient client, MessageReactionRequest data) {
@@ -44,19 +46,27 @@ public class MessageReactionHandler {
                 return;
             }
 
-            switch (data.getType()) {
+            boolean changed = switch (data.getType()) {
                 case "add" -> message.addReaction(data.getReaction(), userId);
                 case "remove" -> message.removeReaction(data.getReaction(), userId);
                 case null, default -> {
                     client.sendEvent(ERROR, Map.of("message", "지원하지 않는 리액션 타입입니다."));
-                    return;
+                    yield false;
                 }
+            };
+
+            if (data.getType() == null
+                    || (!data.getType().equals("add") && !data.getType().equals("remove"))) {
+                return;
             }
 
             log.debug("Message reaction processed - type: {}, reaction: {}, messageId: {}, userId: {}",
                 data.getType(), data.getReaction(), message.getId(), userId);
 
             messageRepository.save(message);
+            if (changed) {
+                messagePageCache.invalidateRoom(message.getRoomId());
+            }
 
             MessageReactionResponse response = new MessageReactionResponse(
                 message.getId(),

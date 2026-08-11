@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.ktb.chatapp.cache.MessagePageCache;
 import com.ktb.chatapp.dto.FetchMessagesRequest;
 import com.ktb.chatapp.dto.FetchMessagesResponse;
 import com.ktb.chatapp.model.File;
@@ -24,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,6 +47,9 @@ class MessageLoaderTest {
     
     @Mock
     private MessageReadStatusService messageReadStatusService;
+
+    @Mock
+    private MessagePageCache messagePageCache;
     
     @InjectMocks
     private MessageLoader messageLoader;
@@ -64,8 +69,14 @@ class MessageLoaderTest {
                 messageRepository,
                 userRepository,
                 new MessageResponseMapper(fileRepository),
-                messageReadStatusService
+                messageReadStatusService,
+                messagePageCache
         );
+
+        lenient().when(messagePageCache.getOrLoad(any(FetchMessagesRequest.class), any()))
+                .thenAnswer(invocation -> new MessagePageCache.LoadResult(
+                        ((Supplier<FetchMessagesResponse>) invocation.getArgument(1)).get(),
+                        false));
         
         var testUser = User.builder()
                 .id(userId)
@@ -233,5 +244,26 @@ class MessageLoaderTest {
         assertThatThrownBy(() -> messageLoader.loadMessages(req, userId))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("DB error");
+    }
+
+    @Test
+    @DisplayName("캐시 hit이면 MongoDB와 사용자/파일 조회 없이 읽음 상태만 갱신한다")
+    void cacheHit_shouldSkipMongoAndUpdateReadStatus() {
+        FetchMessagesResponse cached = FetchMessagesResponse.builder()
+                .messages(List.of(com.ktb.chatapp.dto.MessageResponse.builder()
+                        .id("cached-message")
+                        .build()))
+                .hasMore(false)
+                .build();
+        when(messagePageCache.getOrLoad(any(FetchMessagesRequest.class), any()))
+                .thenReturn(new MessagePageCache.LoadResult(cached, true));
+
+        FetchMessagesResponse result = messageLoader.loadMessages(
+                new FetchMessagesRequest(roomId, 30, null), userId);
+
+        assertThat(result).isEqualTo(cached);
+        verifyNoInteractions(messageRepository, userRepository, fileRepository);
+        verify(messageReadStatusService).updateReadStatus(
+                List.of("cached-message"), userId, roomId);
     }
 }

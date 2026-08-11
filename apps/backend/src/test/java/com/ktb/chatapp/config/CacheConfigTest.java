@@ -5,6 +5,8 @@ import static org.mockito.Mockito.mock;
 
 import com.ktb.chatapp.dto.RoomResponse;
 import com.ktb.chatapp.dto.RoomsResponse;
+import com.ktb.chatapp.dto.FetchMessagesResponse;
+import com.ktb.chatapp.dto.MessageResponse;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -47,5 +49,23 @@ class CacheConfigTest {
             .isEqualTo(createdAt);
         assertThat(configuration.getTtlFunction().getTimeToLive("key", source))
             .isEqualTo(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void messagePageSerializerRestoresFetchMessagesResponse() {
+        CacheConfig config = new CacheConfig();
+        var serializer = config.messagePageCacheSerializer(config.messageCacheObjectMapper());
+        FetchMessagesResponse source = FetchMessagesResponse.builder()
+                .messages(List.of(MessageResponse.builder()
+                        .id("message-1")
+                        .roomId("room-1")
+                        .timestamp(1_754_964_000_000L)
+                        .build()))
+                .hasMore(true)
+                .build();
+
+        FetchMessagesResponse restored = serializer.deserialize(serializer.serialize(source));
+
+        assertThat(restored).isEqualTo(source);
     }
 }

@@ -8,6 +8,7 @@ import com.ktb.chatapp.dto.FileResponse;
 import com.ktb.chatapp.dto.MessageContent;
 import com.ktb.chatapp.dto.MessageResponse;
 import com.ktb.chatapp.dto.UserResponse;
+import com.ktb.chatapp.cache.MessagePageCache;
 import com.ktb.chatapp.model.*;
 import com.ktb.chatapp.repository.FileRepository;
 import com.ktb.chatapp.repository.MessageRepository;
@@ -49,6 +50,7 @@ public class ChatMessageHandler {
     private final BannedWordChecker bannedWordChecker;
     private final RateLimitService rateLimitService;
     private final MeterRegistry meterRegistry;
+    private final MessagePageCache messagePageCache;
     
     @OnEvent(CHAT_MESSAGE)
     public void handleChatMessage(SocketIOClient client, ChatMessageRequest data) {
@@ -159,6 +161,7 @@ public class ChatMessageHandler {
             }
 
             Message savedMessage = messageRepository.save(message);
+            messagePageCache.invalidateRoom(roomId);
             MessageResponse messageResponse = createMessageResponse(savedMessage, sender);
 
             socketIOServer.getRoomOperations(roomId)

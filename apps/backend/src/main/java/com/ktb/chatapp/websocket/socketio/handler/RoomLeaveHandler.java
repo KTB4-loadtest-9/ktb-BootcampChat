@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.ktb.chatapp.cache.MessagePageCache;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
 import com.corundumstudio.socketio.annotation.OnEvent;
@@ -47,6 +48,7 @@ public class RoomLeaveHandler {
     private final UserRepository userRepository;
     private final UserRooms userRooms;
     private final MessageResponseMapper messageResponseMapper;
+    private final MessagePageCache messagePageCache;
     
     @OnEvent(LEAVE_ROOM)
     public void handleLeaveRoom(SocketIOClient client, String roomId) {
@@ -103,6 +105,7 @@ public class RoomLeaveHandler {
             systemMessage.setMetadata(new HashMap<>());
 
             Message savedMessage = messageRepository.save(systemMessage);
+            messagePageCache.invalidateRoom(roomId);
             MessageResponse response = messageResponseMapper.mapToMessageResponse(savedMessage, null);
 
             socketIOServer.getRoomOperations(roomId)

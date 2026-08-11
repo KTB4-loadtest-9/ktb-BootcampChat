@@ -64,6 +64,11 @@ const argv = yargs(cliArgs)
     type: 'number',
     default: 1000
   })
+  .option('history-refetches', {
+    description: 'Repeat the initial history page this many times before sending messages',
+    type: 'number',
+    default: 0
+  })
   .help()
   .alias('help', 'h')
   .argv;
@@ -231,6 +236,26 @@ class LoadTester {
       this.sockets.push(socket);
 
       return new Promise((resolve) => {
+        let historyRefetchesRemaining = this.config.historyRefetches;
+        let messagesStarted = false;
+        let historyRefetchTimeout = null;
+
+        const clearHistoryRefetchTimeout = () => {
+          if (historyRefetchTimeout) {
+            clearTimeout(historyRefetchTimeout);
+            historyRefetchTimeout = null;
+          }
+        };
+
+        const startMessages = () => {
+          if (messagesStarted) {
+            return;
+          }
+          messagesStarted = true;
+          clearHistoryRefetchTimeout();
+          this.sendMessages(socket, userId, roomId);
+        };
+
         socket.on('connect', () => {
           const connectionTime = Date.now() - connectStartTime;
           this.metrics.connected++;
@@ -247,8 +272,15 @@ class LoadTester {
           // Fetch previous messages before starting to send
           socket.emit(CLIENT_EMIT.FETCH_PREVIOUS_MESSAGES, { roomId: roomId, limit: 30 });
 
-          // Start sending messages
-          this.sendMessages(socket, userId, roomId);
+          if (historyRefetchesRemaining === 0) {
+            startMessages();
+          } else {
+            // Keep the user moving if a history response is lost during a load test.
+            historyRefetchTimeout = setTimeout(() => {
+              this.log('warn', `User ${userId} history refetch timed out; starting messages`);
+              startMessages();
+            }, 15000);
+          }
         });
 
         socket.on(SERVER_EMIT.PREVIOUS_MESSAGES_LOADED, (data) => {
@@ -256,11 +288,23 @@ class LoadTester {
           if (data.messages?.length) {
             this.metrics.messagesReceived += data.messages.length;
           }
+
+          if (messagesStarted) {
+            return;
+          }
+
+          if (historyRefetchesRemaining > 0) {
+            historyRefetchesRemaining--;
+            socket.emit(CLIENT_EMIT.FETCH_PREVIOUS_MESSAGES, { roomId: roomId, limit: 30 });
+          } else {
+            startMessages();
+          }
         });
 
         socket.on(SERVER_EMIT.JOIN_ROOM_ERROR, (error) => {
           this.metrics.errorsConnection++;
           this.log('error', `User ${userId} failed to join room:`, error.message || JSON.stringify(error));
+          clearHistoryRefetchTimeout();
           socket.close();
           resolve();
         });
@@ -306,9 +350,11 @@ class LoadTester {
         socket.on(SERVER_EMIT.ERROR, (error) => {
           this.metrics.errorsMessage++;
           this.log('error', `User ${userId} received error:`, error);
+          startMessages();
         });
 
         socket.on('disconnect', (reason) => {
+          clearHistoryRefetchTimeout();
           this.metrics.disconnected++;
           this.log('warn', `User ${userId} disconnected:`, reason);
           resolve();
@@ -317,6 +363,7 @@ class LoadTester {
         socket.on('connect_error', (error) => {
           this.metrics.errorsConnection++;
           this.log('error', `User ${userId} connection error:`, error.message);
+          clearHistoryRefetchTimeout();
           socket.close();
           resolve();
         });
@@ -467,6 +514,7 @@ class LoadTester {
     console.log(chalk.gray(`  Batch delay:     ${batchDelay}ms`));
     console.log(chalk.gray(`  Total batches:   ${totalBatches}`));
     console.log(chalk.gray(`  Messages/user:   ${this.config.messages}`));
+    console.log(chalk.gray(`  History refetches: ${this.config.historyRefetches}`));
     console.log(chalk.gray(`  API URL:         ${this.config.apiUrl}`));
     console.log(chalk.gray(`  Socket.IO URL:   ${this.config.socketUrl}`));
     console.log(chalk.gray(`  Room ID:         ${this.config.roomId || 'auto-create'}`));
@@ -541,7 +589,10 @@ const tester = new LoadTester({
   duration: argv.duration,
   messages: argv.messages,
   batchSize: argv.batchSize,
-  batchDelay: argv.batchDelay
+  batchDelay: argv.batchDelay,
+  historyRefetches: Number.isFinite(argv.historyRefetches)
+    ? Math.max(0, Math.floor(argv.historyRefetches))
+    : 0
 });
 
 tester.run().catch(error => {

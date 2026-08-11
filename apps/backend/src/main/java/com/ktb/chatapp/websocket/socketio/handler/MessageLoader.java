@@ -3,6 +3,7 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.ktb.chatapp.dto.FetchMessagesRequest;
 import com.ktb.chatapp.dto.FetchMessagesResponse;
 import com.ktb.chatapp.dto.MessageResponse;
+import com.ktb.chatapp.cache.MessagePageCache;
 import com.ktb.chatapp.model.File;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.User;
@@ -33,6 +34,7 @@ public class MessageLoader {
     private final UserRepository userRepository;
     private final MessageResponseMapper messageResponseMapper;
     private final MessageReadStatusService messageReadStatusService;
+    private final MessagePageCache messagePageCache;
 
     private static final int BATCH_SIZE = 30;
 
@@ -40,10 +42,25 @@ public class MessageLoader {
      * 메시지 로드
      */
     public FetchMessagesResponse loadMessages(FetchMessagesRequest data, String userId) {
-        return loadMessagesInternal(data.roomId(), data.limit(BATCH_SIZE), data.before(LocalDateTime.now()), userId);
+        MessagePageCache.LoadResult result = messagePageCache.getOrLoad(
+                data,
+                () -> loadMessagesFromMongo(
+                        data.roomId(),
+                        data.limit(BATCH_SIZE),
+                        data.before(LocalDateTime.now()),
+                        userId));
+
+        if (result.cacheHit()) {
+            List<String> messageIds = result.response().getMessages().stream()
+                    .map(MessageResponse::getId)
+                    .filter(Objects::nonNull)
+                    .toList();
+            messageReadStatusService.updateReadStatus(messageIds, userId, data.roomId());
+        }
+        return result.response();
     }
 
-    private FetchMessagesResponse loadMessagesInternal(
+    private FetchMessagesResponse loadMessagesFromMongo(
             String roomId,
             int limit,
             LocalDateTime before,

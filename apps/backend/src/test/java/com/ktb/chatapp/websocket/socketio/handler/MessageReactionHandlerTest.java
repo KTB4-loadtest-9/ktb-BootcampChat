@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.ktb.chatapp.cache.MessagePageCache;
 import com.corundumstudio.socketio.BroadcastOperations;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
@@ -9,6 +10,8 @@ import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import java.util.Optional;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,12 +36,13 @@ class MessageReactionHandlerTest {
     @Mock private MessageRepository messageRepository;
     @Mock private SocketIOClient client;
     @Mock private BroadcastOperations roomOperations;
+    @Mock private MessagePageCache messagePageCache;
 
     private MessageReactionHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new MessageReactionHandler(socketIOServer, messageRepository);
+        handler = new MessageReactionHandler(socketIOServer, messageRepository, messagePageCache);
     }
 
     @Test
@@ -66,10 +70,34 @@ class MessageReactionHandlerTest {
         handler.handleMessageReaction(client, request);
 
         verify(messageRepository).save(message);
+        verify(messagePageCache).invalidateRoom("room-1");
         ArgumentCaptor<Object> responseCaptor = ArgumentCaptor.forClass(Object.class);
         verify(roomOperations).sendEvent(eq(MESSAGE_REACTION_UPDATE), responseCaptor.capture());
         MessageReactionResponse response = (MessageReactionResponse) responseCaptor.getValue();
         assertEquals("message-1", response.getMessageId());
         assertEquals(Set.of("user-1"), response.getReactions().get("👍"));
+    }
+
+    @Test
+    void handleMessageReaction_doesNotInvalidateWhenReactionStateIsUnchanged() {
+        Message message = Message.builder()
+                .id("message-1")
+                .roomId("room-1")
+                .reactions(new HashMap<>(java.util.Map.of(
+                        "👍", new HashSet<>(Set.of("user-1")))))
+                .build();
+        MessageReactionRequest request =
+                new MessageReactionRequest("👍", "message-1", "add", "👍");
+
+        when(client.get("user"))
+                .thenReturn(new SocketUser("user-1", "tester", "session-1", "socket-1"));
+        when(messageRepository.findById("message-1")).thenReturn(Optional.of(message));
+        when(messageRepository.save(message)).thenReturn(message);
+        when(socketIOServer.getRoomOperations("room-1")).thenReturn(roomOperations);
+
+        handler.handleMessageReaction(client, request);
+
+        verify(messageRepository).save(message);
+        verify(messagePageCache, never()).invalidateRoom(any());
     }
 }

@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.ai;
 
+import com.ktb.chatapp.cache.MessagePageCache;
 import com.ktb.chatapp.dto.MessageContent;
 import com.ktb.chatapp.event.AiMessageCompleteEvent;
 import com.ktb.chatapp.event.AiMessageSavedEvent;
@@ -31,14 +32,17 @@ public class AiService {
     private final ChatClient chatClient;
     private final ApplicationEventPublisher eventPublisher;
     private final MessageRepository messageRepository;
+    private final MessagePageCache messagePageCache;
 
     public AiService(
             ChatClient.Builder chatClientBuilder,
             ApplicationEventPublisher eventPublisher,
-            MessageRepository messageRepository) {
+            MessageRepository messageRepository,
+            MessagePageCache messagePageCache) {
         this.chatClient = chatClientBuilder.build();
         this.eventPublisher = eventPublisher;
         this.messageRepository = messageRepository;
+        this.messagePageCache = messagePageCache;
     }
 
     public void handleAIMentions(String roomId, String userId, MessageContent messageContent) {
@@ -108,6 +112,7 @@ public class AiService {
         try {
             // 메시지 저장
             Message savedMessage = messageRepository.save(getMessage(event));
+            messagePageCache.invalidateRoom(event.getRoomId());
             log.info("AI message saved - messageId: {}, savedId: {}, roomId: {}",
                 event.getMessageId(), savedMessage.getId(), event.getRoomId());
 
