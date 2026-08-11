@@ -100,4 +100,20 @@ class ConnectionLoginHandlerTest {
         verify(client).del("user");
         verify(client).disconnect();
     }
+
+    @Test
+    void onDisconnect_skipsRoomCleanupForAnOlderConnection() {
+        UUID oldSocketId = UUID.randomUUID();
+        SocketUser oldUser = new SocketUser("user-1", "tester", "session-1", oldSocketId.toString());
+        SocketUser activeUser = new SocketUser("user-1", "tester", "session-1", UUID.randomUUID().toString());
+        when(client.get("user")).thenReturn(oldUser);
+        when(client.getSessionId()).thenReturn(oldSocketId);
+        when(connectedUsers.get(oldUser.id())).thenReturn(activeUser);
+
+        handler.onDisconnect(client);
+
+        verify(roomLeaveHandler, org.mockito.Mockito.never()).handleDisconnectRooms(org.mockito.Mockito.any(), org.mockito.Mockito.any());
+        verify(connectedUsers, org.mockito.Mockito.never()).del(oldUser.id());
+        verify(client).disconnect();
+    }
 }

@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.corundumstudio.socketio.BroadcastOperations;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
 import com.corundumstudio.socketio.annotation.OnDisconnect;
@@ -11,7 +12,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -60,7 +60,7 @@ public class ConnectionLoginHandler {
         String userId = user.id();
         
         try {
-            // 다른 노드에 접속된 사용자는 통보 불가
+            // Redis-backed user room으로 기존 연결에도 중복 로그인을 알린다.
             notifyDuplicateLogin(client, userId);
             client.set("user", user);
             
@@ -92,12 +92,13 @@ public class ConnectionLoginHandler {
                 return;
             }
             
-            roomLeaveHandler.handleDisconnectRooms(client, userRooms.get(userId));
             String socketId = client.getSessionId().toString();
-            
+
             // 해당 사용자의 현재 활성 연결인 경우에만 정리
             var socketUser = connectedUsers.get(userId);
-            if (socketUser != null && socketId.equals(socketUser.socketId())) {
+            boolean currentConnection = socketUser == null || socketId.equals(socketUser.socketId());
+            if (currentConnection) {
+                roomLeaveHandler.handleDisconnectRooms(client, userRooms.get(userId));
                 connectedUsers.del(userId);
             } else {
                 log.warn("Socket.IO disconnect: User {} has a different active connection. Skipping cleanup.", userId);
@@ -133,22 +134,17 @@ public class ConnectionLoginHandler {
     }
     
     /**
-     * TODO 멀티 클러스터에서 동작 안함
-     * socketIOServer.getRoomOperations("user:" + userId) 로 처리 변경.
+     * The user room is backed by the distributed Socket.IO store, so this also
+     * reaches the active connection when it belongs to another backend node.
      */
     private void notifyDuplicateLogin(SocketIOClient client, String userId) {
         var socketUser = connectedUsers.get(userId);
         if (socketUser == null) {
             return;
         }
-        String existingSocketId = socketUser.socketId();
-        SocketIOClient existingClient = socketIOServer.getClient(UUID.fromString(existingSocketId));
-        if (existingClient == null) {
-            return;
-        }
-        
+        BroadcastOperations userOperations = socketIOServer.getRoomOperations("user:" + userId);
         // Send duplicate login notification
-        existingClient.sendEvent(DUPLICATE_LOGIN, Map.of(
+        userOperations.sendEvent(DUPLICATE_LOGIN, Map.of(
                 "type", "new_login_attempt",
                 "deviceInfo", client.getHandshakeData().getHttpHeaders().get("User-Agent"),
                 "ipAddress", client.getRemoteAddress().toString(),
@@ -158,7 +154,7 @@ public class ConnectionLoginHandler {
         Thread.ofVirtual().name("duplicate-login-notification").start(() -> {
             try {
                 Thread.sleep(Duration.ofSeconds(10));
-                existingClient.sendEvent(SESSION_ENDED, Map.of(
+                userOperations.sendEvent(SESSION_ENDED, Map.of(
                         "reason", "duplicate_login",
                         "message", "다른 기기에서 로그인하여 현재 세션이 종료되었습니다."
                 ));

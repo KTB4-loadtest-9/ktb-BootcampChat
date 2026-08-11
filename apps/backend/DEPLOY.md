@@ -116,6 +116,7 @@ tail -f logs/app.log
    MONGO_URI=mongodb://localhost:27017/bootcamp-chat
    REDIS_HOST=localhost
    REDIS_PORT=6379
+   SOCKETIO_STORE=redisson
 
    # 서버 포트
    PORT=5001
@@ -133,6 +134,10 @@ tail -f logs/app.log
    # Redis 상태 확인
    systemctl status redis
    ```
+
+   여러 백엔드 인스턴스를 운영할 때는 모든 인스턴스가 같은 Redis를 사용하고
+   `SOCKETIO_STORE=redisson`을 설정해야 합니다. Redis 장애 중 Pub/Sub 이벤트는
+   재생되지 않으므로 복구 후 클라이언트의 재연결과 room 재참여를 확인하세요.
 
 ### Docker 런타임
 
