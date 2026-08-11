@@ -2,6 +2,7 @@ package com.ktb.chatapp.websocket.socketio.handler;
 
 import com.ktb.chatapp.dto.FetchMessagesRequest;
 import com.ktb.chatapp.dto.FetchMessagesResponse;
+import com.ktb.chatapp.model.File;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.FileRepository;
@@ -22,6 +23,7 @@ import org.springframework.data.domain.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -103,7 +105,7 @@ class MessageLoaderTest {
         
         // DB는 DESC 정렬로 반환한다고 가정 (최신 것 먼저)
         // [21시간 전, 22시간 전, ..., 50시간 전]
-        var messagePage = getMessagePage(first30Messages);
+        var messagePage = getMessageSlice(first30Messages, true);
         
         when(messageRepository.findByRoomIdAndTimestampBefore(
                 eq(roomId), any(LocalDateTime.class), any(Pageable.class)))
@@ -122,12 +124,11 @@ class MessageLoaderTest {
         verifyAscending(result);
     }
     
-    private static @NotNull Page<Message> getMessagePage(List<Message> first30Messages) {
+    private static @NotNull Slice<Message> getMessageSlice(List<Message> first30Messages, boolean hasNext) {
         List<Message> messages = new ArrayList<>(first30Messages.reversed());
-        
+
         Pageable pageable = PageRequest.of(0, 30, Sort.by("timestamp").descending());
-        Page<Message> messagePage = new PageImpl<>(messages, pageable, 50);
-        return messagePage;
+        return new SliceImpl<>(messages, pageable, hasNext);
     }
     
     @Test
@@ -138,7 +139,7 @@ class MessageLoaderTest {
         
         // DB는 DESC 정렬로 반환 (최신 것부터)
         // [1시간 전, 2시간 전, ..., 30시간 전]
-        Page<Message> messagePage = getMessagePage(last30Messages);
+        Slice<Message> messagePage = getMessageSlice(last30Messages, false);
         
         when(messageRepository.findByRoomIdAndTimestampBefore(
                 eq(roomId), any(LocalDateTime.class), any(Pageable.class)))
@@ -167,10 +168,10 @@ class MessageLoaderTest {
         Pageable pageable = PageRequest.of(0, 30, Sort.by("timestamp").descending());
         when(messageRepository.findByRoomIdAndTimestampBefore(
                 eq(roomId), any(LocalDateTime.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(secondMessage, firstMessage), pageable, 2));
+                .thenReturn(new SliceImpl<>(List.of(secondMessage, firstMessage), pageable, false));
         when(fileRepository.findAllById(any())).thenReturn(List.of(
-                com.ktb.chatapp.model.File.builder().id("file-1").filename("one.txt").build(),
-                com.ktb.chatapp.model.File.builder().id("file-2").filename("two.txt").build()));
+                File.builder().id("file-1").filename("one.txt").build(),
+                File.builder().id("file-2").filename("two.txt").build()));
 
         FetchMessagesResponse result = messageLoader.loadMessages(
                 new FetchMessagesRequest(roomId, 30, null), userId);
@@ -180,6 +181,36 @@ class MessageLoaderTest {
                 .containsExactly("file-1", "file-2");
         verify(fileRepository).findAllById(any());
         verify(fileRepository, never()).findById(anyString());
+    }
+
+    @Test
+    @DisplayName("loadMessages: senderId를 중복 제거해 배치 조회하고 없는 sender는 비워 둔다")
+    void loadMessages_shouldBatchLoadDistinctSendersAndKeepMissingSendersNull() {
+        Message first = createMessage("first", LocalDateTime.now().minusHours(2));
+        Message duplicateSender = createMessage("duplicate", LocalDateTime.now().minusHours(1));
+        Message aiMessage = createMessage("ai", LocalDateTime.now().minusMinutes(30));
+        Message missingSender = createMessage("missing", LocalDateTime.now().minusMinutes(15));
+        duplicateSender.setSenderId(userId);
+        aiMessage.setSenderId(null);
+        missingSender.setSenderId("missing-user");
+
+        when(messageRepository.findByRoomIdAndTimestampBefore(
+                eq(roomId), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(List.of(missingSender, aiMessage, duplicateSender, first),
+                        PageRequest.of(0, 30, Sort.by("timestamp").descending()), false));
+        when(userRepository.findAllById(Set.of(userId, "missing-user")))
+                .thenReturn(List.of(User.builder().id(userId).name("sender").build()));
+
+        FetchMessagesResponse result = messageLoader.loadMessages(
+                new FetchMessagesRequest(roomId, 30, null), userId);
+
+        assertThat(result.getMessages()).hasSize(4);
+        assertThat(result.getMessages().get(0).getSender().getId()).isEqualTo(userId);
+        assertThat(result.getMessages().get(1).getSender().getId()).isEqualTo(userId);
+        assertThat(result.getMessages().get(2).getSender()).isNull();
+        assertThat(result.getMessages().get(3).getSender()).isNull();
+        verify(userRepository).findAllById(Set.of(userId, "missing-user"));
+        verify(userRepository, never()).findById(anyString());
     }
     
     private static void verifyAscending(FetchMessagesResponse result) {

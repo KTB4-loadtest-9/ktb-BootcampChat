@@ -4,8 +4,8 @@ import com.ktb.chatapp.model.Message;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.Update;
@@ -13,7 +13,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface MessageRepository extends MongoRepository<Message, String> {
-    Page<Message> findByRoomIdAndTimestampBefore(String roomId, LocalDateTime timestamp, Pageable pageable);
+    Slice<Message> findByRoomIdAndTimestampBefore(String roomId, LocalDateTime timestamp, Pageable pageable);
 
     @Query("{ '_id': { '$in': ?0 }, 'room': ?1, 'readers.userId': { '$ne': ?2 } }")
     @Update("{ '$addToSet': { 'readers': { 'userId': ?2, 'readAt': ?3 } } }")

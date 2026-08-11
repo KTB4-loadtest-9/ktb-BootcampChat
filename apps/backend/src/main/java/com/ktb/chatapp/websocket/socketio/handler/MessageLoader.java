@@ -9,8 +9,8 @@ import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.MessageReadStatusService;
-import jakarta.annotation.Nullable;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,9 +18,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
@@ -50,7 +50,7 @@ public class MessageLoader {
             String userId) {
         Pageable pageable = PageRequest.of(0, limit, Sort.by("timestamp").descending());
 
-        Page<Message> messagePage = messageRepository
+        Slice<Message> messagePage = messageRepository
                 .findByRoomIdAndTimestampBefore(roomId, before, pageable);
 
         List<Message> messages = messagePage.getContent();
@@ -67,13 +67,21 @@ public class MessageLoader {
                 .collect(Collectors.toSet());
         Map<String, File> filesById = messageResponseMapper.findFilesByIds(fileIds);
         
+        Set<String> senderIds = sortedMessages.stream()
+                .map(Message::getSenderId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        Map<String, User> usersById = new HashMap<>();
+        if (!senderIds.isEmpty()) {
+            userRepository.findAllById(senderIds)
+                    .forEach(user -> usersById.put(user.getId(), user));
+        }
+
         // 메시지 응답 생성
         List<MessageResponse> messageResponses = sortedMessages.stream()
-                .map(message -> {
-                    var user = findUserById(message.getSenderId());
-                    return messageResponseMapper.mapToMessageResponse(message, user, filesById);
-                })
-                .collect(Collectors.toList());
+                .map(message -> messageResponseMapper.mapToMessageResponse(
+                        message, usersById.get(message.getSenderId()), filesById))
+                .toList();
 
         boolean hasMore = messagePage.hasNext();
 
@@ -86,15 +94,4 @@ public class MessageLoader {
                 .build();
     }
 
-    /**
-     * AI 경우 null 반환 가능
-     */
-    @Nullable
-    private User findUserById(String id) {
-        if (id == null) {
-            return null;
-        }
-        return userRepository.findById(id)
-                .orElse(null);
-    }
 }

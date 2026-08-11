@@ -20,6 +20,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.index.IndexInfo;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
@@ -43,6 +45,9 @@ class MessageLoaderIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private MongoTemplate mongoTemplate;
 
     @Autowired
     private FileRepository fileRepository;
@@ -179,6 +184,14 @@ class MessageLoaderIntegrationTest {
         // Then: 빈 결과 반환
         assertThat(response.getMessages()).isEmpty();
         assertThat(response.isHasMore()).isFalse();
+    }
+
+    @Test
+    @DisplayName("메시지 이력 조회용 room + timestamp 복합 인덱스가 생성된다")
+    void messageHistoryIndex_shouldBeCreated() {
+        List<IndexInfo> indexes = mongoTemplate.indexOps(Message.class).getIndexInfo();
+
+        assertThat(indexes).anyMatch(index -> index.getName().equals("room_timestamp_idx"));
     }
 
     /**
