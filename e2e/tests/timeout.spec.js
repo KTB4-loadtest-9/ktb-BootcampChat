@@ -55,12 +55,6 @@ const waitForErrorSurface = async (page, timeout) => {
   console.log(`  · 화면 문구: "${(await surface.innerText()).trim()}"`);
 };
 
-const withoutMessages = (payload) => {
-  const [name, body] = JSON.parse(payload.slice(2));
-  const { messages, ...rest } = body;
-  return `42${JSON.stringify([name, rest])}`;
-};
-
 test.describe.serial('서버 과부하 시 프론트 타임아웃', () => {
   let storageState;
   let roomId;
@@ -207,6 +201,7 @@ test.describe.serial('서버 과부하 시 프론트 타임아웃', () => {
     const { context, page } = await openSession(browser);
 
     let droppedLoads = 0;
+    const messageLoadEventOrder = [];
 
     await page.routeWebSocket(SOCKET_IO_PATTERN, (ws) => {
       const server = ws.connectToServer();
@@ -214,15 +209,17 @@ test.describe.serial('서버 과부하 시 프론트 타임아웃', () => {
       server.onMessage((payload) => {
         const eventName = eventNameOf(payload);
 
-        // joinRoomSuccess 가 messages 를 실어오면 초기 로딩 경로를 타지 않는다.
-        // messages 를 떼어내 fetchPreviousMessages 경로로 유도한다.
         if (eventName === 'joinRoomSuccess') {
-          console.log('  · joinRoomSuccess 에서 messages 제거');
-          ws.send(withoutMessages(payload));
+          const [, body] = JSON.parse(payload.slice(2));
+          messageLoadEventOrder.push(eventName);
+          expect(Array.isArray(body.messages)).toBe(false);
+          console.log('  · joinRoomSuccess 확인: messages 없음');
+          ws.send(payload);
           return;
         }
 
         if (eventName === 'previousMessagesLoaded') {
+          messageLoadEventOrder.push(eventName);
           droppedLoads += 1;
           console.log(`  · previousMessagesLoaded 프레임 드롭 #${droppedLoads}`);
           return;
@@ -241,6 +238,9 @@ test.describe.serial('서버 과부하 시 프론트 타임아웃', () => {
     );
 
     console.log(`  · 드롭한 previousMessagesLoaded 수: ${droppedLoads}`);
+    expect(messageLoadEventOrder.indexOf('joinRoomSuccess')).toBeGreaterThanOrEqual(0);
+    expect(messageLoadEventOrder.indexOf('previousMessagesLoaded'))
+      .toBeGreaterThan(messageLoadEventOrder.indexOf('joinRoomSuccess'));
     await context.close();
   });
 

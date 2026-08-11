@@ -3,8 +3,7 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.corundumstudio.socketio.BroadcastOperations;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
-import com.ktb.chatapp.dto.FetchMessagesRequest;
-import com.ktb.chatapp.dto.FetchMessagesResponse;
+import com.ktb.chatapp.dto.JoinRoomSuccessResponse;
 import com.ktb.chatapp.dto.MessageResponse;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.MessageType;
@@ -22,17 +21,20 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.JOIN_ROOM_ERROR;
 import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.JOIN_ROOM_SUCCESS;
 import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.MESSAGE;
 import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.PARTICIPANTS_UPDATE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class RoomJoinHandlerTest {
@@ -73,7 +75,7 @@ class RoomJoinHandlerTest {
     }
 
     @Test
-    void handleJoinRoom_addsParticipantLoadsMessagesAndBroadcasts() {
+    void handleJoinRoom_addsParticipantWithoutLoadingMessagesAndBroadcasts() {
         SocketUser socketUser = new SocketUser("user-1", "tester", "session-1", "socket-1");
         User user = User.builder().id("user-1").name("tester").email("tester@example.com").build();
         Room room = Room.builder().id("room-1").name("room").participantIds(Set.of("user-1")).build();
@@ -84,11 +86,6 @@ class RoomJoinHandlerTest {
                 .type(MessageType.system)
                 .timestamp(1L)
                 .build();
-        FetchMessagesResponse loadResponse = FetchMessagesResponse.builder()
-                .messages(List.of())
-                .hasMore(false)
-                .build();
-
         when(client.get("user")).thenReturn(socketUser);
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
         when(roomRepository.findById("room-1")).thenReturn(Optional.of(room));
@@ -99,8 +96,6 @@ class RoomJoinHandlerTest {
             message.setTimestamp(LocalDateTime.now());
             return message;
         });
-        when(messageLoader.loadMessages(any(FetchMessagesRequest.class), eq("user-1")))
-                .thenReturn(loadResponse);
         when(messageResponseMapper.mapToMessageResponse(any(Message.class), eq(null)))
                 .thenReturn(joinMessageResponse);
         when(socketIOServer.getRoomOperations("room-1")).thenReturn(roomOperations);
@@ -110,7 +105,12 @@ class RoomJoinHandlerTest {
         verify(roomRepository).addParticipant("room-1", "user-1");
         verify(client).joinRoom("room-1");
         verify(userRooms).add("user-1", "room-1");
-        verify(client).sendEvent(eq(JOIN_ROOM_SUCCESS), any());
+        ArgumentCaptor<JoinRoomSuccessResponse> responseCaptor =
+                ArgumentCaptor.forClass(JoinRoomSuccessResponse.class);
+        verify(client).sendEvent(eq(JOIN_ROOM_SUCCESS), responseCaptor.capture());
+        assertThat(responseCaptor.getValue().getMessages()).isNull();
+        assertThat(responseCaptor.getValue().isHasMore()).isFalse();
+        verifyNoInteractions(messageLoader);
         verify(roomOperations).sendEvent(MESSAGE, joinMessageResponse);
         verify(roomOperations).sendEvent(eq(PARTICIPANTS_UPDATE), any());
     }
