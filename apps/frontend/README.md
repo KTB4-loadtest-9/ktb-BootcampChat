@@ -37,6 +37,7 @@ cp .env.example .env.local
 PORT=3000
 NEXT_PUBLIC_API_URL=http://localhost:5001
 NEXT_PUBLIC_SOCKET_URL=http://localhost:5002
+NEXT_PUBLIC_FILE_UPLOAD_MODE=server
 ```
 
 > `.env.local`은 프로덕션 빌드(`build:production`)에서도 `.env.production`보다
@@ -45,6 +46,10 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:5002
 **환경 변수 설명:**
 - `NEXT_PUBLIC_API_URL`: 백엔드 REST API 서버 주소
 - `NEXT_PUBLIC_SOCKET_URL`: Socket.IO 서버 주소
+- `NEXT_PUBLIC_FILE_UPLOAD_MODE`: `server`는 기존 multipart 업로드, `presigned`는 S3 직접 업로드
+
+`presigned`는 백엔드의 `/api/files/upload/presign`과 S3 CORS가 준비된 환경에서만 사용하세요.
+Docker 이미지에서는 `--build-arg NEXT_PUBLIC_FILE_UPLOAD_MODE=presigned`로 빌드 시점에 주입합니다.
 
 서버환경에서 실행시 Route 53 에 등록한 도메인을 입력하세요. 예: `https://chat.goorm-ktb-[번호].goorm.team`
 
