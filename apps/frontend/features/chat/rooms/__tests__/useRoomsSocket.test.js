@@ -22,7 +22,9 @@ const renderRoomsSocket = (socket, overrides = {}) => {
       currentUser,
       router: { push: vi.fn() },
       setConnectionStatus: vi.fn(),
+      rooms: [],
       setRooms: vi.fn(),
+      setMetadata: vi.fn(),
       ...overrides,
     })
   );
@@ -100,6 +102,86 @@ describe('useRoomsSocket', () => {
     ).toEqual([
       { _id: 'room-1', name: '방1', recentMessageCount: 1 },
       { _id: 'room-2', name: '방2', recentMessageCount: 9 },
+    ]);
+  });
+
+  it('prepends a new room and updates pagination metadata once', async () => {
+    const socket = createSocket();
+    const setRooms = vi.fn();
+    const setMetadata = vi.fn();
+
+    renderRoomsSocket(socket, {
+      rooms: [{ _id: 'room-1', name: '방 1' }],
+      setRooms,
+      setMetadata,
+    });
+
+    await waitFor(() => {
+      expect(socket.on).toHaveBeenCalledWith('roomCreated', expect.any(Function));
+    });
+
+    handlerFor(socket, 'roomCreated')({ _id: 'room-2', name: '방 2 최신' });
+
+    const updateRooms = setRooms.mock.calls[0][0];
+
+    expect(updateRooms([
+      { _id: 'room-1', name: '방 1' },
+    ])).toEqual([
+      { _id: 'room-2', name: '방 2 최신' },
+      { _id: 'room-1', name: '방 1' },
+    ]);
+
+    const updateMetadata = setMetadata.mock.calls[0][0];
+    expect(updateMetadata({
+      total: 20,
+      page: 0,
+      pageSize: 20,
+      totalPages: 1,
+      hasMore: false,
+      currentCount: 20,
+    })).toMatchObject({ total: 21, totalPages: 2, hasMore: true });
+  });
+
+  it('does not change metadata when a roomCreated event repeats an already loaded room', async () => {
+    const socket = createSocket();
+    const setRooms = vi.fn();
+    const setMetadata = vi.fn();
+
+    renderRoomsSocket(socket, {
+      rooms: [{ _id: 'room-2', name: '방 2', participants: [{ id: 'user-1' }] }],
+      setRooms,
+      setMetadata,
+    });
+
+    await waitFor(() => {
+      expect(socket.on).toHaveBeenCalledWith('roomCreated', expect.any(Function));
+    });
+
+    handlerFor(socket, 'roomCreated')({ _id: 'room-2', name: '방 2 최신' });
+
+    expect(setMetadata).not.toHaveBeenCalled();
+  });
+
+  it('merges roomUpdated payloads without discarding fields from the paged list', async () => {
+    const socket = createSocket();
+    const setRooms = vi.fn();
+
+    renderRoomsSocket(socket, { setRooms });
+
+    await waitFor(() => {
+      expect(socket.on).toHaveBeenCalledWith('roomUpdated', expect.any(Function));
+    });
+
+    handlerFor(socket, 'roomUpdated')({ _id: 'room-2', name: '방 2 최신' });
+
+    const updateRooms = setRooms.mock.calls[0][0];
+
+    expect(updateRooms([
+      { _id: 'room-1', name: '방 1' },
+      { _id: 'room-2', name: '방 2', participants: [{ id: 'user-1' }] },
+    ])).toEqual([
+      { _id: 'room-1', name: '방 1' },
+      { _id: 'room-2', name: '방 2 최신', participants: [{ id: 'user-1' }] },
     ]);
   });
 

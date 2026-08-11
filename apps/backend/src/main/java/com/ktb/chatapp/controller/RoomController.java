@@ -81,8 +81,8 @@ public class RoomController {
         }
     }
 
-    // 전체 채팅방 목록 조회
-    @Operation(summary = "채팅방 목록 조회", description = "전체 채팅방 목록을 최신순으로 조회합니다. Rate Limit이 적용됩니다.")
+    // 채팅방 목록 조회
+    @Operation(summary = "채팅방 목록 조회", description = "채팅방 목록을 최신순으로 페이지 단위 조회합니다. Rate Limit이 적용됩니다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "채팅방 목록 조회 성공",
             content = @Content(schema = @Schema(implementation = RoomsResponse.class))),
@@ -96,10 +96,20 @@ public class RoomController {
     })
     @GetMapping
     @RateLimit
-    public ResponseEntity<?> getAllRooms(Principal principal) {
+    public ResponseEntity<?> getAllRooms(
+            Principal principal,
+            @Parameter(description = "0부터 시작하는 페이지 번호", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지 크기 (기본 20, 최대 50)", example = "20")
+            @RequestParam(defaultValue = "20") int pageSize
+    ) {
+        if (page < 0 || pageSize < 1 || pageSize > RoomService.MAX_PAGE_SIZE) {
+            return ResponseEntity.badRequest()
+                    .body(StandardResponse.error("페이지 번호 또는 페이지 크기가 올바르지 않습니다."));
+        }
 
         try {
-            RoomsResponse response = roomService.getAllRooms(principal.getName());
+            RoomsResponse response = roomService.getAllRooms(principal.getName(), page, pageSize);
 
             // 캐시 설정
             return ResponseEntity.ok()
