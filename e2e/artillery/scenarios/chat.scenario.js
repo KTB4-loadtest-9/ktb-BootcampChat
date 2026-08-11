@@ -17,6 +17,25 @@ const MASS_MESSAGE_COUNT = process.env.MASS_MESSAGE_COUNT || 10;
 const ACTION_TIMEOUT = parseInt(process.env.ACTION_TIMEOUT || '1000', 10);
 const ACTION_TIMEOUT_SHORT = parseInt(process.env.ACTION_TIMEOUT_SHORT || '500', 10);
 const ACTION_TIMEOUT_LONG = parseInt(process.env.ACTION_TIMEOUT_LONG || '2000', 10);
+const FILE_UPLOAD_RESPONSE_TIMEOUT = Math.max(ACTION_TIMEOUT_LONG * 3, 45000);
+
+async function safeResponseBody(response) {
+    try {
+        const body = await response.text();
+        return body
+            .replace(/https?:\/\/[^\s"']+/g, '[redacted-url]')
+            .replace(/Bearer\s+[^\s"']+/gi, 'Bearer [redacted]')
+            .slice(0, 500);
+    } catch {
+        return '<response body unavailable>';
+    }
+}
+
+function waitForResponseResult(page, predicate, timeout) {
+    return page.waitForResponse(predicate, { timeout })
+        .then(response => ({ response }))
+        .catch(error => ({ error }));
+}
 
 async function gotoChatPage(page, vuContext) {
     await page.goto(`${BASE_URL}/chat`);
@@ -87,13 +106,68 @@ async function fileUploadScenario(page, vuContext) {
         const filePath = path.resolve(__dirname, '../../fixtures/images/profile.jpg');
         const message = `파일 업로드 부하 테스트 ${bannedWordSafeText(Date.now())}`;
 
-        const uploadPromise = page.waitForResponse(
-            response => response.url().includes('/api/files/upload') && response.status() === 200,
-            { timeout: 15000 }
-        );
+        const diagnostics = {
+            presignResponse: null,
+            s3PutResponse: null,
+            s3PutFailure: null,
+        };
+        const onResponse = response => {
+            if (response.url().includes('/api/files/chat-images/presign')) {
+                diagnostics.presignResponse = response;
+            } else if (response.request().method() === 'PUT') {
+                diagnostics.s3PutResponse = response;
+            }
+        };
+        const onRequestFailed = request => {
+            if (request.method() === 'PUT') {
+                diagnostics.s3PutFailure = request.failure()?.errorText || 'unknown network error';
+            }
+        };
 
-        await uploadFileAction(page, filePath, message);
-        await uploadPromise;
+        page.on('response', onResponse);
+        page.on('requestfailed', onRequestFailed);
+
+        try {
+            // Do not filter by status here. A 4xx/5xx response is the most useful
+            // diagnostic and must not be hidden behind a Playwright timeout.
+            const uploadResultPromise = waitForResponseResult(
+                page,
+                response => response.url().includes('/api/files/upload'),
+                FILE_UPLOAD_RESPONSE_TIMEOUT
+            );
+
+            await uploadFileAction(page, filePath, message);
+            const uploadResult = await uploadResultPromise;
+
+            if (uploadResult.error) {
+                const presignStatus = diagnostics.presignResponse?.status() ?? 'not-observed';
+                const presignBody = diagnostics.presignResponse && presignStatus >= 400
+                    ? await safeResponseBody(diagnostics.presignResponse)
+                    : 'n/a';
+                const putStatus = diagnostics.s3PutResponse?.status() ?? 'not-observed';
+                throw new Error(
+                    `Upload completion response not observed within ${FILE_UPLOAD_RESPONSE_TIMEOUT}ms; ` +
+                    `presignStatus=${presignStatus}; presignBody=${presignBody}; ` +
+                    `s3PutStatus=${putStatus}; s3PutFailure=${diagnostics.s3PutFailure || 'none'}`
+                );
+            }
+
+            const uploadResponse = uploadResult.response;
+            if (uploadResponse.status() !== 200) {
+                throw new Error(
+                    `/api/files/upload failed with HTTP ${uploadResponse.status()}: ` +
+                    await safeResponseBody(uploadResponse)
+                );
+            }
+
+            console.log(
+                `File upload HTTP stages: presign=${diagnostics.presignResponse?.status() ?? 'not-observed'}, ` +
+                `s3Put=${diagnostics.s3PutResponse?.status() ?? 'not-observed'}, complete=${uploadResponse.status()}`
+            );
+        } finally {
+            page.off('response', onResponse);
+            page.off('requestfailed', onRequestFailed);
+        }
 
         await page.waitForTimeout(ACTION_TIMEOUT);
 
