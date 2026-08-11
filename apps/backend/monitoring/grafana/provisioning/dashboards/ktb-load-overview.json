@@ -1,0 +1,97 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red" }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "expr": "(min(up{job=\"spring-boot-app\"}) or vector(0)) * (min(up{job=\"mongodb\"}) or vector(0)) * (min(up{job=\"redis\"}) or vector(0))", "legendFormat": "required services", "refId": "A" }
+      ],
+      "title": "Service Status",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 9, "x": 6, "y": 0 },
+      "id": 2,
+      "targets": [
+        { "expr": "sum(rate(http_server_requests_seconds_count{application=\"ktb-chat-backend\"}[1m]))", "legendFormat": "all requests", "refId": "A" },
+        { "expr": "sum(rate(http_server_requests_seconds_count{application=\"ktb-chat-backend\",status=~\"4..|5..\"}[1m])) or vector(0)", "legendFormat": "error requests", "refId": "B" }
+      ],
+      "title": "HTTP Request Rate (Observed)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 9, "x": 15, "y": 0 },
+      "id": 3,
+      "targets": [
+        { "expr": "sum(rate(http_server_requests_seconds_sum{application=\"ktb-chat-backend\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"ktb-chat-backend\"}[1m])) * 1000", "legendFormat": "mean HTTP latency", "refId": "A" }
+      ],
+      "title": "Mean HTTP Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "id": 4,
+      "targets": [
+        { "expr": "sum(rate(mongodb_driver_commands_seconds_count{application=\"ktb-chat-backend\"}[1m]))", "legendFormat": "Mongo commands/sec", "refId": "A" },
+        { "expr": "sum(mongodb_driver_pool_checkedout{application=\"ktb-chat-backend\"})", "legendFormat": "checked out", "refId": "B" },
+        { "expr": "sum(mongodb_driver_pool_waitqueuesize{application=\"ktb-chat-backend\"})", "legendFormat": "wait queue", "refId": "C" }
+      ],
+      "title": "MongoDB Driver Pool",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "id": 5,
+      "targets": [
+        { "expr": "process_cpu_usage{application=\"ktb-chat-backend\"} * 100", "legendFormat": "CPU used", "refId": "A" },
+        { "expr": "sum(jvm_memory_used_bytes{application=\"ktb-chat-backend\",area=\"heap\"}) / sum(jvm_memory_max_bytes{application=\"ktb-chat-backend\",area=\"heap\"}) * 100", "legendFormat": "heap used", "refId": "B" }
+      ],
+      "title": "Backend Heap Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "id": 6,
+      "targets": [
+        { "expr": "socketio_concurrent_users{application=\"ktb-chat-backend\"}", "legendFormat": "concurrent users", "refId": "A" },
+        { "expr": "sum(rate(socketio_events_total{application=\"ktb-chat-backend\"}[1m]))", "legendFormat": "events/sec", "refId": "B" },
+        { "expr": "sum(rate(socketio_messages_processing_time_seconds_sum{application=\"ktb-chat-backend\"}[1m])) / sum(rate(socketio_messages_processing_time_seconds_count{application=\"ktb-chat-backend\"}[1m])) * 1000", "legendFormat": "mean message latency (ms)", "refId": "C" },
+        { "expr": "sum(rate(socketio_messages_errors_total{application=\"ktb-chat-backend\"}[1m])) or vector(0)", "legendFormat": "message errors/sec (observed)", "refId": "D" }
+      ],
+      "title": "Socket.IO Activity",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["ktb", "load-test"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "title": "KTB Chat Load Overview",
+  "uid": "ktb-load-overview",
+  "version": 1
+}

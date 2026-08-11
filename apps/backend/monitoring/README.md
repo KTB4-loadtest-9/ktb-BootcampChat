@@ -92,7 +92,7 @@ ENVIRONMENT=prod docker compose -f docker-compose.o11y.yaml up -d
 ### 4. Grafana 대시보드
 
 Grafana에 로그인하면 `grafana/provisioning/dashboards/`의 대시보드가 자동으로
-프로비저닝됩니다. 현재 제공되는 대시보드는 하나입니다.
+프로비저닝됩니다. 현재 제공되는 대시보드는 다음과 같습니다.
 
 #### Node Exporter Dashboard
 
@@ -106,10 +106,24 @@ node-exporter가 수집한 호스트 지표를 보여줍니다 (CPU, 메모리, 
 - 노드별 부하 분포 비교
 - 용량 계획 수립
 
+#### KTB Chat Load Overview
+
+`ktb-load-overview.json`은 로컬·운영 Prometheus datasource를 통해 다음 지표를
+확인한다.
+
+- 필수 scrape target 상태
+- HTTP 요청·오류 rate와 평균 latency
+- MongoDB command rate, connection pool 사용량·대기열
+- Backend JVM heap 사용량
+
+대시보드의 datasource UID는 `prometheus`로 고정되어 있으며, 파일이 실제로
+프로비저닝되었는지는 `pnpm run test:artillery:verify`로 확인한다.
+
 #### 대시보드 추가하기
 
-애플리케이션·MongoDB·Redis 지표는 Prometheus에 수집되고 있지만 대시보드는
-포함되어 있지 않습니다. 필요한 대시보드는 직접 만들거나
+애플리케이션·MongoDB·Redis 지표는 Prometheus에 수집되며, 애플리케이션과
+MongoDB pool 지표는 `KTB Chat Load Overview` 대시보드에서 확인할 수 있습니다.
+추가 지표가 필요하면 직접 만들거나
 [Grafana 공식 대시보드](https://grafana.com/grafana/dashboards/)에서 가져와
 `grafana/provisioning/dashboards/`에 JSON으로 두면 10초 안에 반영됩니다.
 

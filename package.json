@@ -8,7 +8,9 @@
     "dev:frontend": "cd apps/frontend && ([ -f .env.local ] || cp .env.example .env.local) && PORT=$(grep '^PORT=' .env.local | cut -d= -f2) pnpm run dev",
     "dev:backend": "cd apps/backend && make dev",
     "test:e2e": "pnpm --dir e2e test",
-    "test:artillery": "cd e2e/artillery && make artillery"
+    "test:artillery": "node scripts/verify-load-observability.mjs artillery",
+    "test:artillery:smoke": "node scripts/verify-load-observability.mjs smoke",
+    "test:artillery:verify": "node scripts/verify-load-observability.mjs verify"
   },
   "devDependencies": {
     "concurrently": "^10.0.3"

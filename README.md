@@ -126,9 +126,10 @@ LAN 모드는 개발 서버를 네트워크에 노출하므로 신뢰할 수 있
 `e2e/actions`에 있는 것과 **같은** 사용자 행위 함수(로그인, 채팅 등)를 재사용하므로, `test:e2e`가
 통과해야 `test:artillery`가 재현하는 행동도 신뢰할 수 있습니다.
 
-두 스위트 모두 대상 서버를 `BASE_URL` 환경 변수로 지정합니다. **기본값은 로컬이 아니라
-배포 서버**(`e2e/.env`, `e2e/artillery/Makefile`)이므로, 로컬 `pnpm run dev` 서버를 대상으로
-할 때는 명시적으로 넘겨야 합니다:
+두 스위트 모두 `BASE_URL` 환경 변수로 대상 서버를 지정할 수 있습니다. `test:e2e`는
+기존 Playwright 설정을 따르고, `test:artillery` 계열은 기본값이
+`http://localhost:3000`이며 원격 대상은 `ALLOW_REMOTE_LOAD=true`를 명시해야
+허용됩니다. 로컬 `pnpm run dev` 서버를 대상으로 하는 Artillery 명령은 다음과 같습니다:
 
 ```bash
 BASE_URL=http://localhost:3000 pnpm run test:artillery
