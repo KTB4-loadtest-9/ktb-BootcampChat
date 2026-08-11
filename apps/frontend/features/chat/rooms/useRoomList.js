@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import axiosInstance from '@/services/axios';
 import { CONNECTION_STATUS } from './useServerConnection';
 
-const ROOM_PAGE_SIZE = 20;
+const ROOM_PAGE_SIZE = 10;
 
 const createMetadata = (metadata = {}, requestedPage = 0, currentCount = 0) => {
   const normalizedMetadata = metadata ?? {};
