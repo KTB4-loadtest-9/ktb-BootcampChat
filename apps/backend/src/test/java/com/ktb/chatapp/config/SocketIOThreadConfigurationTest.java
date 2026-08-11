@@ -21,10 +21,10 @@ class SocketIOThreadConfigurationTest {
     void socketServerUsesConfiguredNettyThreadCounts() {
         assertThreadCounts(
                 contextRunner.withPropertyValues(
-                        "socketio.server.boss-threads=1",
-                        "socketio.server.worker-threads=32"),
-                1,
-                32);
+                        "socketio.server.boss-threads=2",
+                        "socketio.server.worker-threads=4"),
+                2,
+                4);
     }
 
     @Test
