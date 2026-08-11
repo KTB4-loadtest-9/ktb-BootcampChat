@@ -32,7 +32,7 @@ concurrency:
 
 env:
   BUILD_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-  WORKFLOW_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
+  WORKFLOW_REF: ${{ github.sha }}
   TARGET_URL: ${{ vars.LOAD_TEST_BASE_URL || 'https://goorm-ktb-009.goorm.team' }}
   BE_DEPLOY_HOSTS: ${{ vars.BE_DEPLOY_HOSTS }}
   GRAFANA_URL: ${{ vars.GRAFANA_URL }}
@@ -208,26 +208,33 @@ jobs:
           ref: ${{ env.BUILD_REF }}
           persist-credentials: false
 
-      - name: Check out trusted load-test configuration
+      - name: Check out trusted load-test tooling
         uses: actions/checkout@v7
         with:
           ref: ${{ env.WORKFLOW_REF }}
           path: trusted-ci
-          sparse-checkout: e2e/artillery/artillery-config.ci.yaml
+          sparse-checkout: |
+            e2e/artillery/artillery-config.ci.yaml
+            e2e/artillery/run-ci-stage.sh
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
-      - name: Install trusted load-test configuration
+      - name: Install trusted load-test tooling
         run: |
           set -Eeuo pipefail
           test -f trusted-ci/e2e/artillery/artillery-config.ci.yaml
+          test -f trusted-ci/e2e/artillery/run-ci-stage.sh
           test -d e2e/artillery
           test ! -L e2e
           test ! -L e2e/artillery
           test ! -L e2e/artillery/artillery-config.ci.yaml
+          test ! -L e2e/artillery/run-ci-stage.sh
           install -m 0644 \
             trusted-ci/e2e/artillery/artillery-config.ci.yaml \
             e2e/artillery/artillery-config.ci.yaml
+          install -m 0755 \
+            trusted-ci/e2e/artillery/run-ci-stage.sh \
+            e2e/artillery/run-ci-stage.sh
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -247,28 +254,30 @@ jobs:
       - name: Check target health through the public domain
         run: curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 5 "${TARGET_URL%/}/api/health"
 
-      - name: Run staged browser load test
+      - name: Load test · 15 VU
         working-directory: e2e
+        timeout-minutes: 10
+        run: ./artillery/run-ci-stage.sh 15
+
+      - name: Recovery after 15 VU
         run: |
-          set -Eeuo pipefail
-          mkdir -p ../artillery-reports
+          echo 'Waiting 20 seconds before the 30-VU stage'
+          sleep 20
 
-          for vus in 15 30 60; do
-            echo "Starting ${vus}-VU stage against ${BASE_URL}"
-            export STAGE_VUS="$vus"
-            if ! pnpm exec artillery run \
-              --output "../artillery-reports/artillery-${vus}-vu.json" \
-              artillery/artillery-config.ci.yaml \
-              2>&1 | tee "../artillery-reports/artillery-${vus}-vu.log"; then
-              echo "${vus}-VU stage failed" >&2
-              exit 1
-            fi
+      - name: Load test · 30 VU
+        working-directory: e2e
+        timeout-minutes: 15
+        run: ./artillery/run-ci-stage.sh 30
 
-            if [[ "$vus" != '60' ]]; then
-              echo 'Waiting 20 seconds for infrastructure recovery'
-              sleep 20
-            fi
-          done
+      - name: Recovery after 30 VU
+        run: |
+          echo 'Waiting 20 seconds before the 60-VU stage'
+          sleep 20
+
+      - name: Load test · 60 VU
+        working-directory: e2e
+        timeout-minutes: 20
+        run: ./artillery/run-ci-stage.sh 60
 
       - name: Upload Artillery reports
         if: always()

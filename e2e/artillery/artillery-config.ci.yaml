@@ -1,0 +1,20 @@
+config:
+  target: "{{ $env.BASE_URL }}"
+  phases:
+    - name: "{{ $env.STAGE_VUS }} VU cloud stage"
+      duration: 5
+      arrivalCount: "{{ $env.STAGE_VUS }}"
+  processor: "./all-scenarios.js"
+  engines:
+    playwright:
+      launchOptions:
+        headless: true
+      contextOptions:
+        viewport: null
+  ensure:
+    maxErrorRate: 0
+
+scenarios:
+  - name: Full browser journey
+    engine: playwright
+    flowFunction: allScenarios
