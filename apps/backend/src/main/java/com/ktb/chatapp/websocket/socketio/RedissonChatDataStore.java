@@ -17,6 +17,8 @@ public class RedissonChatDataStore implements ChatDataStore {
 
     private static final String ACTIVE_CONNECTION_KEY_PREFIX = "conn_users:userid:";
     private static final String LOCK_NAME_PREFIX = "chat:socket:lock:";
+    static final Duration LOCK_WAIT_TIMEOUT = Duration.ofSeconds(5);
+    static final Duration LOCK_LEASE = Duration.ofMinutes(2);
 
     private final RMap<String, Object> storage;
     private final RMapCache<String, Object> activeConnections;
@@ -53,11 +55,23 @@ public class RedissonChatDataStore implements ChatDataStore {
     @Override
     public void withLock(String key, Runnable action) {
         RLock lock = redissonClient.getLock(LOCK_NAME_PREFIX + key);
-        lock.lock();
+        boolean acquired = false;
         try {
+            acquired = lock.tryLock(
+                    LOCK_WAIT_TIMEOUT.toMillis(),
+                    LOCK_LEASE.toMillis(),
+                    TimeUnit.MILLISECONDS);
+            if (!acquired) {
+                throw new IllegalStateException("Could not acquire Redis lock: " + key);
+            }
             action.run();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while acquiring Redis lock: " + key, e);
         } finally {
-            lock.unlock();
+            if (acquired) {
+                lock.unlock();
+            }
         }
     }
 
