@@ -1,10 +1,25 @@
 import { deriveUniqueSortedMessages } from '../messages/useMessageList';
 
+export const createMessageIndex = messages => new Map(
+  messages.map((message, index) => [message._id, index])
+);
+
+const replaceMessageIndex = (messageIndexById, messages) => {
+  messageIndexById.clear();
+  for (let index = 0; index < messages.length; index += 1) {
+    const messageId = messages[index]?._id;
+    if (messageId) {
+      messageIndexById.set(messageId, index);
+    }
+  }
+};
+
 export const processLoadedRoomMessages = ({
   loadedMessages,
   hasMore,
   isInitialLoad = false,
   processedMessageIds,
+  messageIndexById,
   setMessages,
   setHasMoreMessages,
   initialLoadCompletedRef,
@@ -23,6 +38,9 @@ export const processLoadedRoomMessages = ({
   let nextMessages;
   setMessages(prev => {
     nextMessages = deriveUniqueSortedMessages(prev, loadedMessages, processedSnapshot).messages;
+    if (messageIndexById?.current) {
+      replaceMessageIndex(messageIndexById.current, nextMessages);
+    }
     return nextMessages;
   });
   setHasMoreMessages(hasMore);
@@ -34,24 +52,52 @@ export const processLoadedRoomMessages = ({
   return nextMessages;
 };
 
-export const applyReadReceipts = (messages, { userId, messageIds, timestamp }) =>
-  messages.map(msg => {
-    if (!messageIds.includes(msg._id)) {
-      return msg;
-    }
+export const applyReadReceipts = (
+  messages,
+  { userId, messageIds, timestamp },
+  messageIndexById,
+) => {
+  if (!userId || !Array.isArray(messageIds) || messageIds.length === 0) {
+    return messages;
+  }
 
-    const alreadyRead = msg.readers?.some(reader =>
+  const activeIndex = messageIndexById || createMessageIndex(messages);
+  const hasStaleIndex = activeIndex.size !== messages.length ||
+    messageIds.some(messageId => {
+      const index = activeIndex.get(messageId);
+      return index !== undefined && messages[index]?._id !== messageId;
+    });
+
+  if (hasStaleIndex) {
+    replaceMessageIndex(activeIndex, messages);
+  }
+
+  let nextMessages = messages;
+  const readAt = timestamp || new Date();
+
+  for (const messageId of new Set(messageIds)) {
+    const index = activeIndex.get(messageId);
+    if (index === undefined) continue;
+
+    const message = messages[index];
+    if (!message) continue;
+
+    const alreadyRead = message.readers?.some(reader =>
       reader.userId === userId || reader._id === userId
     );
-    if (alreadyRead) {
-      return msg;
-    }
+    if (alreadyRead) continue;
 
-    return {
-      ...msg,
-      readers: [...(msg.readers || []), { userId, readAt: timestamp || new Date() }],
+    if (nextMessages === messages) {
+      nextMessages = messages.slice();
+    }
+    nextMessages[index] = {
+      ...message,
+      readers: [...(message.readers || []), { userId, readAt }],
     };
-  });
+  }
+
+  return nextMessages;
+};
 
 export const appendIncomingMessage = (messages, incoming) => {
   if (!incoming?._id) {
@@ -69,6 +115,7 @@ export const createRoomEventHandlers = ({
   mountedRef,
   messageProcessingRef,
   processedMessageIds,
+  messageIndexById,
   initialLoadCompletedRef,
   processMessages,
   setRoom,
@@ -109,13 +156,23 @@ export const createRoomEventHandlers = ({
     },
     onMessagesRead: (payload) => {
       if (!mountedRef.current) return;
-      setMessages(prev => applyReadReceipts(prev, payload));
+      setMessages(prev => applyReadReceipts(
+        prev,
+        payload,
+        messageIndexById?.current,
+      ));
     },
     onMessage: (incoming) => {
       if (!mountedRef.current || messageProcessingRef.current) return;
       if (!incoming?._id || processedMessageIds.current.has(incoming._id)) return;
       processedMessageIds.current.add(incoming._id);
-      setMessages(prev => appendIncomingMessage(prev, incoming));
+      setMessages(prev => {
+        const nextMessages = appendIncomingMessage(prev, incoming);
+        if (nextMessages !== prev && messageIndexById?.current) {
+          messageIndexById.current.set(incoming._id, nextMessages.length - 1);
+        }
+        return nextMessages;
+      });
     },
     onPreviousMessagesLoaded: handlePreviousMessages,
     onMessageReactionUpdate: (data) => {
