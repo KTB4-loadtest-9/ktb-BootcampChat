@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.mongodb.ExplainVerbosity;
 import com.ktb.chatapp.config.MongoTestContainer;
 import com.ktb.chatapp.config.RedisTestContainer;
 import com.ktb.chatapp.dto.FetchMessagesRequest;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.IntStream;
 import net.datafaker.Faker;
+import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -192,6 +194,33 @@ class MessageLoaderIntegrationTest {
         List<IndexInfo> indexes = mongoTemplate.indexOps(Message.class).getIndexInfo();
 
         assertThat(indexes).anyMatch(index -> index.getName().equals("room_timestamp_idx"));
+    }
+
+    @Test
+    @DisplayName("파일로 메시지를 조회할 때 인덱스를 사용한다")
+    void messageFileIndex_shouldBeCreatedAndUsed() {
+        String fileId = faker.internet().uuid();
+        Message message = new Message();
+        message.setRoomId(roomId);
+        message.setSenderId(userId);
+        message.setFileId(fileId);
+        messageRepository.save(message);
+
+        List<IndexInfo> indexes = mongoTemplate.indexOps(Message.class).getIndexInfo();
+        assertThat(indexes).anyMatch(index ->
+                index.getName().equals("idx_messages_file")
+                        && index.isIndexForFields(List.of("file"))
+        );
+
+        Document explain = mongoTemplate.getCollection("messages")
+                .find(new Document("file", fileId))
+                .limit(2)
+                .explain(ExplainVerbosity.EXECUTION_STATS);
+        Document executionStats = explain.get("executionStats", Document.class);
+
+        assertThat(explain.toJson()).contains("\"stage\": \"IXSCAN\"");
+        assertThat(executionStats.getInteger("totalKeysExamined")).isBetween(1, 2);
+        assertThat(executionStats.getInteger("totalDocsExamined")).isBetween(1, 2);
     }
 
     /**
