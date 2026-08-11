@@ -9,6 +9,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 async function joinFirstChatRoomAction(page) {
   await page.goto(`${BASE_URL}/chat`);
   await page.getByTestId('join-chat-room-button').first().click();
+  await page.waitForURL(new RegExp(`${BASE_URL}/chat/[a-f0-9]{24}`));
 }
 
 /**
@@ -26,6 +27,7 @@ async function joinRandomChatRoomAction(page) {
 
   const randomIndex = Math.floor(Math.random() * count);
   await chatRoomButtons.nth(randomIndex).click();
+  await page.waitForURL(new RegExp(`${BASE_URL}/chat/[a-f0-9]{24}`));
 }
 
 /**

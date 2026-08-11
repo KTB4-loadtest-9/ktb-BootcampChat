@@ -92,7 +92,7 @@ ENVIRONMENT=prod docker compose -f docker-compose.o11y.yaml up -d
 ### 4. Grafana 대시보드
 
 Grafana에 로그인하면 `grafana/provisioning/dashboards/`의 대시보드가 자동으로
-프로비저닝됩니다. 현재 제공되는 대시보드는 하나입니다.
+프로비저닝됩니다. 로컬 부하 측정에는 `KTB Chat Load Overview`를 사용합니다.
 
 #### Node Exporter Dashboard
 
@@ -108,8 +108,7 @@ node-exporter가 수집한 호스트 지표를 보여줍니다 (CPU, 메모리, 
 
 #### 대시보드 추가하기
 
-애플리케이션·MongoDB·Redis 지표는 Prometheus에 수집되고 있지만 대시보드는
-포함되어 있지 않습니다. 필요한 대시보드는 직접 만들거나
+추가 대시보드는 직접 만들거나
 [Grafana 공식 대시보드](https://grafana.com/grafana/dashboards/)에서 가져와
 `grafana/provisioning/dashboards/`에 JSON으로 두면 10초 안에 반영됩니다.
 
@@ -325,7 +324,7 @@ environment:
 1. Spring Boot 애플리케이션이 실행 중인지 확인
 2. `http://localhost:5001/actuator/prometheus`에서 메트릭이 노출되는지 확인
 3. Docker 네트워크 설정 확인 (host.docker.internal)
-4. 개발 Prometheus 설정에는 `cadvisor:8080` scrape target이 있지만 현재 로컬 Compose에는 cAdvisor 서비스가 없습니다. 해당 target은 별도 cAdvisor를 띄우기 전까지 DOWN일 수 있습니다.
+4. 로컬 Compose는 cAdvisor와 Node Exporter를 실행하지 않으므로 개발 Prometheus도 해당 타깃을 수집하지 않습니다.
 
 ### Grafana 대시보드가 표시되지 않는 경우
 

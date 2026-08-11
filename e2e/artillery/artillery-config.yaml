@@ -9,10 +9,13 @@ config:
     playwright:
       launchOptions:
         headless: true
-        slowMo: 100
       contextOptions:
         viewport: null
 
 scenarios:
-  - engine: playwright
+  - name: smoke
+    engine: playwright
+    flowFunction: smokeScenarios
+  - name: full
+    engine: playwright
     flowFunction: allScenarios
