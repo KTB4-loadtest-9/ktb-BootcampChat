@@ -31,14 +31,21 @@ describe('fileService', () => {
       mimetype: file.type,
       size: file.size,
     };
-    const post = vi.spyOn(axiosInstance, 'post').mockResolvedValue({
-      data: {
-        success: true,
-        uploadUrl: 'https://s3.test/upload',
-        objectKey: 'chat/generated.png',
-        file: fileData,
-      },
-    });
+    const post = vi.spyOn(axiosInstance, 'post')
+      .mockResolvedValueOnce({
+        data: {
+          uploadId: 'upload-1',
+          uploadUrl: 'https://s3.test/upload',
+          objectKey: 'chat/generated.png',
+          requiredHeaders: { 'Content-Type': file.type },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          file: fileData,
+        },
+      });
     const put = vi.spyOn(axios, 'put').mockImplementation(async (_url, _file, config) => {
       for (const loaded of [1, 5, 10, 19, 20, 100]) {
         config.onUploadProgress({ loaded, total: 100 });
@@ -49,11 +56,12 @@ describe('fileService', () => {
 
     const result = await fileService.uploadFile(file, onProgress);
 
-    expect(post).toHaveBeenCalledWith(
-      'http://api.test/api/files/upload/presign',
+    expect(post).toHaveBeenNthCalledWith(
+      1,
+      'http://api.test/api/files/chat-images/presign',
       {
-        originalname: file.name,
-        mimetype: file.type,
+        originalName: file.name,
+        contentType: file.type,
         size: file.size,
       },
       { withCredentials: true, timeout: 10000, maxRetries: 0 }
@@ -65,6 +73,12 @@ describe('fileService', () => {
         headers: { 'Content-Type': file.type },
         timeout: 30000,
       })
+    );
+    expect(post).toHaveBeenNthCalledWith(
+      2,
+      'http://api.test/api/files/chat-images/upload-1/complete',
+      {},
+      { withCredentials: true, timeout: 10000, maxRetries: 0 }
     );
     expect(onProgress.mock.calls).toEqual([[10], [20], [100]]);
     expect(result).toEqual({
