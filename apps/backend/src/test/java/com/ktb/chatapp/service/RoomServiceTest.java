@@ -17,9 +17,11 @@ import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -204,6 +206,33 @@ class RoomServiceTest {
         assertThat(response.getCreator().getId()).isEqualTo("creator-1");
         verify(userRepository, never()).findAllById(any());
         verify(recentMessageCounter, never()).countRecentMessages(anyString());
+    }
+
+    @Test
+    void joinRoom_usesAtomicMembershipUpdateToAvoidLostParticipants() {
+        User creator = User.builder().id("creator-1").email("creator@example.com").build();
+        User joiner = User.builder().id("joiner-1").email("joiner@example.com").build();
+        Room beforeJoin = Room.builder()
+                .id("room-1")
+                .creator(creator.getId())
+                .participantIds(new HashSet<>(Set.of(creator.getId())))
+                .build();
+        Room afterJoin = Room.builder()
+                .id("room-1")
+                .creator(creator.getId())
+                .participantIds(new HashSet<>(Set.of(creator.getId(), joiner.getId())))
+                .build();
+        when(roomRepository.findById("room-1"))
+                .thenReturn(Optional.of(beforeJoin), Optional.of(afterJoin));
+        when(userRepository.findByEmail(joiner.getEmail())).thenReturn(Optional.of(joiner));
+        when(userRepository.findAllById(any())).thenReturn(List.of(creator, joiner));
+
+        Room joinedRoom = service().joinRoom("room-1", null, joiner.getEmail());
+
+        assertThat(joinedRoom.getParticipantIds()).contains(creator.getId(), joiner.getId());
+        verify(roomRepository).addParticipant("room-1", joiner.getId());
+        verify(roomRepository, times(2)).findById("room-1");
+        verify(roomRepository, never()).save(any(Room.class));
     }
 
     private RoomService service() {
