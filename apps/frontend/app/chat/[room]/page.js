@@ -1,11 +1,15 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Profiler, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import ChatHeader from '@/components/ChatHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import ChatRoomView from '@/features/chat/room/ChatRoomView';
 import { useRoomId } from '@/hooks/useRoomId';
+import {
+  isChatRenderProfilingEnabled,
+  recordChatRender,
+} from '@/lib/performance/chatRenderProfiler';
 
 const LoadingState = () => (
   <div
@@ -38,7 +42,7 @@ export default function ChatRoomPage() {
     return <LoadingState />;
   }
 
-  return (
+  const content = (
     <>
       <ChatHeader />
       <ChatRoomView
@@ -49,4 +53,14 @@ export default function ChatRoomPage() {
       />
     </>
   );
+
+  if (isChatRenderProfilingEnabled) {
+    return (
+      <Profiler id="ChatRoomPage" onRender={recordChatRender}>
+        {content}
+      </Profiler>
+    );
+  }
+
+  return content;
 }

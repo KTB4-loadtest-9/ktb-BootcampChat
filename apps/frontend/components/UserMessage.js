@@ -1,9 +1,14 @@
-import React, { useRef } from 'react';
+import React, { Profiler, useRef } from 'react';
 import { VStack, HStack } from '@vapor-ui/core';
 import MessageContent from './MessageContent';
 import MessageActions from './MessageActions';
 import CustomAvatar from './CustomAvatar';
 import ReadStatus from './ReadStatus';
+import {
+  createChatProfilerId,
+  isChatRenderProfilingEnabled,
+  recordChatRender,
+} from '@/lib/performance/chatRenderProfiler';
 
 const UserMessage = ({
   msg = {}, 
@@ -27,7 +32,7 @@ const UserMessage = ({
 
   const user = isMine ? currentUser : msg.sender;
 
-  return (
+  const content = (
     <div className="my-4" ref={messageDomRef} data-testid="message-container">
       <VStack
         className={`max-w-[65%] ${isMine ? 'ml-auto items-end' : 'mr-auto items-start'}`}
@@ -104,6 +109,19 @@ const UserMessage = ({
       </VStack>
     </div>
   );
+
+  if (isChatRenderProfilingEnabled) {
+    return (
+      <Profiler
+        id={createChatProfilerId('UserMessage', msg._id)}
+        onRender={recordChatRender}
+      >
+        {content}
+      </Profiler>
+    );
+  }
+
+  return content;
 };
 
 UserMessage.defaultProps = {

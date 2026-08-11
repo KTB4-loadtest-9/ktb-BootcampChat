@@ -1,10 +1,14 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { Profiler, useCallback, useMemo } from 'react';
 import { Spinner, Text, VStack } from '@vapor-ui/core';
 import SystemMessage from './SystemMessage';
 import FileMessage from './FileMessage';
 import UserMessage from './UserMessage';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { useAutoScroll } from '../hooks/useAutoScroll';
+import {
+  isChatRenderProfilingEnabled,
+  recordChatRender,
+} from '@/lib/performance/chatRenderProfiler';
 
 const LoadingIndicator = React.memo(() => (
   <div className="loading-messages">
@@ -106,7 +110,7 @@ const ChatMessages = ({
     );
   }, [currentUser, room, isMine, onReactionAdd, onReactionRemove]);
 
-  return (
+  const content = (
     <VStack
       ref={containerRef}
       className="h-full overflow-y-auto overflow-x-hidden scroll-smooth [overflow-scrolling:touch]"
@@ -146,6 +150,16 @@ const ChatMessages = ({
       )}
     </VStack>
   );
+
+  if (isChatRenderProfilingEnabled) {
+    return (
+      <Profiler id="ChatMessages" onRender={recordChatRender}>
+        {content}
+      </Profiler>
+    );
+  }
+
+  return content;
 };
 
 ChatMessages.displayName = 'ChatMessages';
