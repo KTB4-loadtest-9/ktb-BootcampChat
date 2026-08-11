@@ -36,7 +36,6 @@ export default function ChatRoomsView({ router }) {
     connectionStatus: httpConnectionStatus,
     setConnectionStatus: setHttpConnectionStatus,
     isRetrying,
-    attemptConnection,
   } = useServerConnection();
   const [socketConnectionStatus, setSocketConnectionStatus] = useState(
     CONNECTION_STATUS.CHECKING
@@ -65,11 +64,9 @@ export default function ChatRoomsView({ router }) {
     connectionStatus: httpConnectionStatus,
     setConnectionStatus: setHttpConnectionStatus,
     isRetrying,
-    attemptConnection,
     canJoinRooms,
   });
 
-  const connectionCheckTimerRef = useRef(null);
   const initialFetchStartedRef = useRef(false);
   const refreshRoomsRef = useRef(refreshRooms);
 
@@ -111,20 +108,6 @@ export default function ChatRoomsView({ router }) {
       }
     };
   }, [currentUserKey, fetchRooms]);
-
-  useEffect(() => {
-    if (!currentUserKey || httpConnectionStatus !== CONNECTION_STATUS.CHECKING) return;
-
-    connectionCheckTimerRef.current = setInterval(() => {
-      attemptConnection();
-    }, 5000);
-
-    return () => {
-      if (connectionCheckTimerRef.current) {
-        clearInterval(connectionCheckTimerRef.current);
-      }
-    };
-  }, [currentUserKey, httpConnectionStatus, attemptConnection]);
 
   // 활성도 지표는 소켓 이벤트만으로 만료를 알 수 없어 주기적으로 다시 조회한다.
   // 보이지 않는 탭에서는 갱신을 멈추고, 다시 보일 때 즉시 한 번 따라잡는다.
@@ -180,10 +163,10 @@ export default function ChatRoomsView({ router }) {
             <Text typography="heading3">채팅방 목록</Text>
             <HStack $css={{ gap: '$200' }}>
               <Badge colorPalette={STATUS_CONFIG[httpConnectionStatus]?.color || 'danger'}>
-                서버 {STATUS_CONFIG[httpConnectionStatus].label}
+                서버 {STATUS_CONFIG[httpConnectionStatus]?.label || '연결 오류'}
               </Badge>
               <Badge colorPalette={STATUS_CONFIG[socketConnectionStatus]?.color || 'danger'}>
-                실시간 {STATUS_CONFIG[socketConnectionStatus].label}
+                실시간 {STATUS_CONFIG[socketConnectionStatus]?.label || '연결 오류'}
               </Badge>
               {error || httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
                 <Button
@@ -254,7 +237,6 @@ export default function ChatRoomsView({ router }) {
               </HStack>
             </Callout.Root>
           )}
-
         {httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
           <ConnectionErrorBanner message="채팅 서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요." />
         ) : loading ? (

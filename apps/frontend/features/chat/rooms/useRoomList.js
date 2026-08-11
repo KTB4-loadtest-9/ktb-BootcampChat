@@ -40,7 +40,6 @@ export const useRoomList = ({
   connectionStatus,
   setConnectionStatus,
   isRetrying,
-  attemptConnection,
   canJoinRooms = connectionStatus === CONNECTION_STATUS.CONNECTED,
 }) => {
   const [rooms, setRooms] = useState([]);
@@ -93,10 +92,6 @@ export const useRoomList = ({
   }, [isRetrying, setConnectionStatus]);
 
   const loadRooms = useCallback(async (page = 0) => {
-    if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
-      await attemptConnection();
-    }
-
     const response = await axiosInstance.get('/api/rooms', {
       params: {
         page,
@@ -111,7 +106,8 @@ export const useRoomList = ({
 
     setRooms(payload.data);
     setPagination(createPagination(payload.metadata, page, payload.data.length));
-  }, [attemptConnection, connectionStatus]);
+    setConnectionStatus(CONNECTION_STATUS.CONNECTED);
+  }, [setConnectionStatus]);
 
   const fetchRooms = useCallback(async (page = pagination.page) => {
     if (!currentUser?.token || isLoadingRef.current) {
@@ -121,6 +117,9 @@ export const useRoomList = ({
     try {
       isLoadingRef.current = true;
 
+      if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+        setConnectionStatus(CONNECTION_STATUS.CONNECTING);
+      }
       setLoading(true);
       setError(null);
 
@@ -138,7 +137,15 @@ export const useRoomList = ({
       setLoading(false);
       isLoadingRef.current = false;
     }
-  }, [currentUser, pagination.page, isInitialLoad, loadRooms, handleFetchError]);
+  }, [
+    currentUser,
+    pagination.page,
+    connectionStatus,
+    setConnectionStatus,
+    isInitialLoad,
+    loadRooms,
+    handleFetchError,
+  ]);
 
   /**
    * 이미 그려진 목록을 유지한 채 다시 조회한다.
