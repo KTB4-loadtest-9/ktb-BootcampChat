@@ -70,6 +70,9 @@ export const createApiClient = ({
     async (error) => {
       const config = error.config || {};
       config.retryCount = config.retryCount || 0;
+      const maxRetries = Number.isInteger(config.maxRetries)
+        ? Math.max(0, config.maxRetries)
+        : RETRY_CONFIG.maxRetries;
 
       if (isCanceledRequest(error)) {
         return Promise.reject(error);
@@ -93,7 +96,7 @@ export const createApiClient = ({
         return Promise.reject(error);
       }
 
-      if (isRetryableError(error) && config.retryCount < RETRY_CONFIG.maxRetries) {
+      if (isRetryableError(error) && config.retryCount < maxRetries) {
         config.retryCount++;
         const delay = getRetryDelay(config.retryCount);
 

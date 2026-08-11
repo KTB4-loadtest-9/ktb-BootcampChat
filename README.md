@@ -71,6 +71,7 @@ NextJS와 Spring Boot 기반 채팅 애플리케이션 모노레포입니다.
 |------|------|
 | `NEXT_PUBLIC_API_URL` | 백엔드 REST API 주소 (기본 `http://localhost:5001`) |
 | `NEXT_PUBLIC_SOCKET_URL` | Socket.IO 주소 (기본 `http://localhost:5002`) |
+| `NEXT_PUBLIC_FILE_UPLOAD_MODE` | `server`는 기존 multipart 업로드, `presigned`는 S3 직접 업로드 (기본 `server`) |
 
 ## 개발 서버 실행
 
