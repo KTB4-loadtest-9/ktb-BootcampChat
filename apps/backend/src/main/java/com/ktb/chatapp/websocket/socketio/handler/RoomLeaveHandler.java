@@ -17,8 +17,12 @@ import com.ktb.chatapp.websocket.socketio.UserRooms;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -114,12 +118,8 @@ public class RoomLeaveHandler {
             return;
         }
         
-        var participantList = roomOpt.get()
-                .getParticipantIds()
+        var participantList = userRepository.findAllById(roomOpt.get().getParticipantIds())
                 .stream()
-                .map(userRepository::findById)
-                .filter(Optional::isPresent)
-                .map(Optional::get)
                 .map(UserResponse::from)
                 .toList();
         
@@ -129,6 +129,44 @@ public class RoomLeaveHandler {
         
         socketIOServer.getRoomOperations(roomId)
                 .sendEvent(PARTICIPANTS_UPDATE, participantList);
+    }
+
+    /**
+     * 연결 종료 시 사용자와 방 존재 여부를 한 번에 확인한 뒤 방별 정리 작업만 수행한다.
+     */
+    public void handleDisconnectRooms(SocketIOClient client, Set<String> roomIds) {
+        if (roomIds == null || roomIds.isEmpty()) {
+            return;
+        }
+
+        String userId = getUserId(client);
+        String userName = getUserName(client);
+        if (userId == null) {
+            return;
+        }
+
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return;
+        }
+
+        Map<String, Room> roomsById = roomRepository.findAllById(new HashSet<>(roomIds)).stream()
+                .collect(Collectors.toMap(Room::getId, Function.identity()));
+
+        for (String roomId : new HashSet<>(roomIds)) {
+            Room room = roomsById.get(roomId);
+            if (room == null) {
+                continue;
+            }
+
+            roomRepository.removeParticipant(roomId, userId);
+            client.leaveRoom(roomId);
+            userRooms.remove(userId, roomId);
+            log.info("User {} left room {}", userName, room.getName());
+
+            sendSystemMessage(roomId, userName + "님이 퇴장하였습니다.");
+            broadcastParticipantList(roomId);
+        }
     }
 
     private SocketUser getUserDto(SocketIOClient client) {

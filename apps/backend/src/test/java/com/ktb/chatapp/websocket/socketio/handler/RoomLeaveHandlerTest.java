@@ -96,7 +96,7 @@ class RoomLeaveHandlerTest {
         when(client.get("user")).thenReturn(socketUser);
         when(userRooms.isInRoom("user-1", "room-1")).thenReturn(true);
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
-        when(userRepository.findById("user-2")).thenReturn(Optional.of(remainingUser));
+        when(userRepository.findAllById(any())).thenReturn(List.of(remainingUser));
         when(roomRepository.findById("room-1"))
                 .thenReturn(Optional.of(roomBeforeLeave), Optional.of(roomAfterLeave));
         when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> {
@@ -120,6 +120,28 @@ class RoomLeaveHandlerTest {
         @SuppressWarnings("unchecked")
         var participants = (java.util.List<UserResponse>) participantsCaptor.getValue();
         assertEquals(List.of("user-2"), participants.stream().map(UserResponse::getId).toList());
+        verify(userRepository, never()).findById("user-2");
         verify(roomOperations, never()).sendEvent(eq("userLeft"), any());
+    }
+
+    @Test
+    void handleDisconnectRooms_batchesUserAndRoomValidation() {
+        SocketUser socketUser = new SocketUser("user-1", "tester", "session-1", "socket-1");
+        User user = User.builder().id("user-1").name("tester").build();
+        Room room = Room.builder().id("room-1").name("room").participantIds(Set.of("user-1")).build();
+
+        when(client.get("user")).thenReturn(socketUser);
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+        when(roomRepository.findAllById(any())).thenReturn(List.of(room));
+        when(roomRepository.findById("room-1")).thenReturn(Optional.of(room));
+        when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(socketIOServer.getRoomOperations("room-1")).thenReturn(roomOperations);
+
+        handler.handleDisconnectRooms(client, Set.of("room-1"));
+
+        verify(userRepository).findById("user-1");
+        verify(roomRepository).findAllById(any());
+        verify(roomRepository).findById("room-1");
+        verify(roomRepository).removeParticipant("room-1", "user-1");
     }
 }

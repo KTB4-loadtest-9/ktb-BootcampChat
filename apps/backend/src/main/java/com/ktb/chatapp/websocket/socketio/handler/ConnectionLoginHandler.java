@@ -64,10 +64,8 @@ public class ConnectionLoginHandler {
             notifyDuplicateLogin(client, userId);
             client.set("user", user);
             
-            userRooms.get(userId).forEach(roomId -> {
-                // 재접속 시 기존 참여 방 재입장 처리
-                roomJoinHandler.handleJoinRoom(client, roomId);
-            });
+            // 재접속 시 기존 참여 방을 한 번에 검증하고 재입장 처리
+            roomJoinHandler.handleReconnectRooms(client, userRooms.get(userId));
             
             connectedUsers.set(userId, user);
 
@@ -94,9 +92,7 @@ public class ConnectionLoginHandler {
                 return;
             }
             
-            userRooms.get(userId).forEach(roomId -> {
-                roomLeaveHandler.handleLeaveRoom(client, roomId);
-            });
+            roomLeaveHandler.handleDisconnectRooms(client, userRooms.get(userId));
             String socketId = client.getSessionId().toString();
             
             // 해당 사용자의 현재 활성 연결인 경우에만 정리
