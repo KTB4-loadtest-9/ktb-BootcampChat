@@ -159,17 +159,17 @@ class FileService {
     try {
       const baseUrl = this.baseUrl || '';
       const presignResponse = await axiosInstance.post(
-        `${baseUrl}/api/files/upload/presign`,
+        `${baseUrl}/api/files/chat-images/presign`,
         {
-          originalname: file.name,
-          mimetype: file.type,
+          originalName: file.name,
+          contentType: file.type,
           size: file.size
         },
         { withCredentials: true, timeout: 10000, maxRetries: 0 }
       );
 
-      const { uploadUrl, objectKey, file: fileData } = presignResponse.data || {};
-      if (!uploadUrl || !objectKey || !fileData?._id) {
+      const { uploadId, uploadUrl, objectKey, requiredHeaders } = presignResponse.data || {};
+      if (!uploadId || !uploadUrl || !objectKey) {
         throw new Error('S3 업로드 URL 응답이 올바르지 않습니다.');
       }
 
@@ -185,10 +185,21 @@ class FileService {
       };
 
       await axios.put(uploadUrl, file, {
-        headers: { 'Content-Type': file.type },
+        headers: requiredHeaders || { 'Content-Type': file.type },
         timeout: 30000,
         onUploadProgress: reportProgress
       });
+
+      const completeResponse = await axiosInstance.post(
+        `${baseUrl}/api/files/chat-images/${uploadId}/complete`,
+        {},
+        { withCredentials: true, timeout: 10000, maxRetries: 0 }
+      );
+
+      const { file: fileData } = completeResponse.data || {};
+      if (!completeResponse.data?.success || !fileData?._id) {
+        throw new Error('S3 업로드 완료 응답이 올바르지 않습니다.');
+      }
 
       return {
         success: true,
