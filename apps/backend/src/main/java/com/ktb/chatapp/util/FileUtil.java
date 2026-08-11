@@ -87,6 +87,23 @@ public class FileUtil {
         }
     }
 
+    public static void validateImageMetadata(String originalFilename, String contentType, long size) {
+        if (originalFilename == null || originalFilename.isBlank()
+                || originalFilename.getBytes(StandardCharsets.UTF_8).length > 255) {
+            throw new IllegalArgumentException("이미지 파일명이 올바르지 않습니다.");
+        }
+        if (contentType == null || !contentType.startsWith("image/") || !ALLOWED_TYPES.containsKey(contentType)) {
+            throw new IllegalArgumentException("지원하지 않는 이미지 형식입니다.");
+        }
+        String extension = getFileExtension(originalFilename).toLowerCase();
+        if (!ALLOWED_TYPES.get(contentType).contains(extension)) {
+            throw new IllegalArgumentException("이미지 확장자와 형식이 일치하지 않습니다.");
+        }
+        if (size <= 0 || size > FILE_SIZE_LIMITS.get("image")) {
+            throw new IllegalArgumentException("이미지 파일은 5MB를 초과할 수 없습니다.");
+        }
+    }
+
     /**
      * 파일 타입 한글명 반환
      */
