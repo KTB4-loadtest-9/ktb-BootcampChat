@@ -1,12 +1,13 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.corundumstudio.socketio.BroadcastOperations;
+import com.corundumstudio.socketio.HandshakeData;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
-import com.corundumstudio.socketio.HandshakeData;
+import io.netty.handler.codec.http.HttpHeaders;
 import com.ktb.chatapp.websocket.socketio.ConnectedUsers;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import com.ktb.chatapp.websocket.socketio.UserRooms;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.InetSocketAddress;
 import java.util.Set;
@@ -17,6 +18,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.DUPLICATE_LOGIN;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,7 +35,7 @@ class ConnectionLoginHandlerTest {
     @Mock private RoomJoinHandler roomJoinHandler;
     @Mock private RoomLeaveHandler roomLeaveHandler;
     @Mock private SocketIOClient client;
-    @Mock private SocketIOClient existingClient;
+    @Mock private BroadcastOperations previousConnectionOperations;
     @Mock private HandshakeData handshakeData;
     @Mock private HttpHeaders httpHeaders;
 
@@ -44,6 +50,11 @@ class ConnectionLoginHandlerTest {
                 roomJoinHandler,
                 roomLeaveHandler,
                 new SimpleMeterRegistry());
+
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(1)).run();
+            return null;
+        }).when(connectedUsers).withUserLock(anyString(), any(Runnable.class));
     }
 
     @Test
@@ -58,29 +69,27 @@ class ConnectionLoginHandlerTest {
         verify(client).set("user", user);
         verify(roomJoinHandler).handleReconnectRooms(client, Set.of("room-1", "room-2"));
         verify(connectedUsers).set(user.id(), user);
-        verify(client).joinRooms(Set.of("user:" + user.id(), "room-list"));
+        verify(client).joinRooms(Set.of("socket:" + user.socketId(), "user:" + user.id(), "room-list"));
     }
 
     @Test
-    void onConnect_withExistingConnection_completesInitialization() {
-        String existingSocketId = UUID.randomUUID().toString();
-        SocketUser user = new SocketUser("user-1", "tester", "session-1", "socket-1");
-        SocketUser existingUser = new SocketUser(user.id(), "tester", "session-0", existingSocketId);
-        when(connectedUsers.get(user.id())).thenReturn(existingUser);
-        when(socketIOServer.getClient(UUID.fromString(existingSocketId))).thenReturn(existingClient);
+    void onConnect_notifiesPreviousConnectionThroughItsOwnRoom() {
+        SocketUser previousUser = new SocketUser("user-1", "tester", "session-1", "old-socket");
+        SocketUser user = new SocketUser("user-1", "tester", "session-2", "new-socket");
+        when(connectedUsers.get(user.id())).thenReturn(previousUser);
+        when(client.get("user")).thenReturn(user);
         when(client.getHandshakeData()).thenReturn(handshakeData);
         when(handshakeData.getHttpHeaders()).thenReturn(httpHeaders);
         when(httpHeaders.get("User-Agent")).thenReturn("test-agent");
-        when(client.getRemoteAddress()).thenReturn(new InetSocketAddress("127.0.0.1", 8080));
-        when(client.get("user")).thenReturn(user);
-        when(userRooms.get(user.id())).thenReturn(Set.of("room-1"));
+        when(client.getRemoteAddress()).thenReturn(new InetSocketAddress("127.0.0.1", 5002));
+        when(userRooms.get(user.id())).thenReturn(Set.of());
+        when(socketIOServer.getRoomOperations("socket:" + previousUser.socketId()))
+                .thenReturn(previousConnectionOperations);
 
         handler.onConnect(client, user);
 
-        verify(client).set("user", user);
-        verify(roomJoinHandler).handleReconnectRooms(client, Set.of("room-1"));
-        verify(connectedUsers).set(user.id(), user);
-        verify(client).joinRooms(Set.of("user:" + user.id(), "room-list"));
+        verify(socketIOServer).getRoomOperations("socket:" + previousUser.socketId());
+        verify(previousConnectionOperations).sendEvent(eq(DUPLICATE_LOGIN), any());
     }
 
     @Test
@@ -96,7 +105,7 @@ class ConnectionLoginHandlerTest {
 
         verify(roomLeaveHandler).handleDisconnectRooms(client, Set.of("room-1"));
         verify(connectedUsers).del(user.id());
-        verify(client).leaveRooms(Set.of("user:" + user.id(), "room-list"));
+        verify(client).leaveRooms(Set.of("socket:" + socketId, "user:" + user.id(), "room-list"));
         verify(client).del("user");
         verify(client).disconnect();
     }

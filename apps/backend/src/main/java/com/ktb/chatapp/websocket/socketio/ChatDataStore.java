@@ -32,6 +32,14 @@ public interface ChatDataStore {
      * @param key the storage key
      */
     void delete(String key);
+
+    /**
+     * Execute an operation while holding the lock identified by the key.
+     *
+     * @param key lock key
+     * @param action operation to execute
+     */
+    void withLock(String key, Runnable action);
     
     int size();
 }

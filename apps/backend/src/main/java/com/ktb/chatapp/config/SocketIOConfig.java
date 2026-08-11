@@ -43,7 +43,7 @@ public class SocketIOConfig {
     @Value("${socketio.server.origin:*}")
     private String origin;
 
-    @Bean(destroyMethod = "")
+    @Bean(destroyMethod = "shutdown")
     @ConditionalOnProperty(name = "socketio.store", havingValue = "redisson", matchIfMissing = true)
     public RedissonClient socketIORedissonClient(
             @Value("${spring.data.redis.host:localhost}") String redisHost,

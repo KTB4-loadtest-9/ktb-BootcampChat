@@ -60,19 +60,20 @@ public class ConnectionLoginHandler {
         String userId = user.id();
         
         try {
-            // Redis-backed user room으로 기존 연결에도 중복 로그인을 알린다.
-            notifyDuplicateLogin(client, userId);
-            client.set("user", user);
-            
-            // 재접속 시 기존 참여 방을 한 번에 검증하고 재입장 처리
-            roomJoinHandler.handleReconnectRooms(client, userRooms.get(userId));
-            
-            connectedUsers.set(userId, user);
+            connectedUsers.withUserLock(userId, () -> {
+                // Redis-backed user room으로 기존 연결에도 중복 로그인을 알린다.
+                notifyDuplicateLogin(client, userId);
+                client.set("user", user);
+                connectedUsers.set(userId, user);
 
-            log.info("Socket.IO user connected: {} ({}) - Total concurrent users: {}",
-                    getUserName(client), userId, connectedUsers.size());
+                // 재접속 시 기존 참여 방을 한 번에 검증하고 재입장 처리
+                roomJoinHandler.handleReconnectRooms(client, userRooms.get(userId));
 
-            client.joinRooms(Set.of("user:" + userId, "room-list"));
+                log.info("Socket.IO user connected: {} ({}) - Total concurrent users: {}",
+                        getUserName(client), userId, connectedUsers.size());
+
+                client.joinRooms(Set.of(socketRoom(user.socketId()), "user:" + userId, "room-list"));
+            });
             
         } catch (Exception e) {
             log.error("Error handling Socket.IO connection", e);
@@ -94,17 +95,19 @@ public class ConnectionLoginHandler {
             
             String socketId = client.getSessionId().toString();
 
-            // 해당 사용자의 현재 활성 연결인 경우에만 정리
-            var socketUser = connectedUsers.get(userId);
-            boolean currentConnection = socketUser == null || socketId.equals(socketUser.socketId());
-            if (currentConnection) {
-                roomLeaveHandler.handleDisconnectRooms(client, userRooms.get(userId));
-                connectedUsers.del(userId);
-            } else {
-                log.warn("Socket.IO disconnect: User {} has a different active connection. Skipping cleanup.", userId);
-            }
+            connectedUsers.withUserLock(userId, () -> {
+                // 해당 사용자의 현재 활성 연결인 경우에만 정리
+                var socketUser = connectedUsers.get(userId);
+                boolean currentConnection = socketUser == null || socketId.equals(socketUser.socketId());
+                if (currentConnection) {
+                    roomLeaveHandler.handleDisconnectRooms(client, userRooms.get(userId));
+                    connectedUsers.del(userId);
+                } else {
+                    log.warn("Socket.IO disconnect: User {} has a different active connection. Skipping cleanup.", userId);
+                }
+            });
 
-            client.leaveRooms(Set.of("user:" + userId, "room-list"));
+            client.leaveRooms(Set.of(socketRoom(socketId), "user:" + userId, "room-list"));
             client.del("user");
             client.disconnect();
 
@@ -142,7 +145,7 @@ public class ConnectionLoginHandler {
         if (socketUser == null) {
             return;
         }
-        BroadcastOperations userOperations = socketIOServer.getRoomOperations("user:" + userId);
+        BroadcastOperations userOperations = socketIOServer.getRoomOperations(socketRoom(socketUser.socketId()));
         // Send duplicate login notification
         userOperations.sendEvent(DUPLICATE_LOGIN, Map.of(
                 "type", "new_login_attempt",
@@ -163,5 +166,9 @@ public class ConnectionLoginHandler {
                 log.error("Error in duplicate login notification thread", e);
             }
         });
+    }
+
+    private String socketRoom(String socketId) {
+        return "socket:" + socketId;
     }
 }
