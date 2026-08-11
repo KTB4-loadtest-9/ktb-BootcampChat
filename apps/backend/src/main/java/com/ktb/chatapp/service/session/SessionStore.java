@@ -1,6 +1,7 @@
 package com.ktb.chatapp.service.session;
 
 import com.ktb.chatapp.model.Session;
+import java.time.Duration;
 import java.util.Optional;
 
 /**
@@ -33,4 +34,7 @@ public interface SessionStore {
     void deleteAll(String userId);
     
     void delete(String userId, String sessionId);
+
+    /** Refresh an existing session only when the stored session id still matches. */
+    boolean touch(String userId, String sessionId, long lastActivity, Duration ttl);
 }

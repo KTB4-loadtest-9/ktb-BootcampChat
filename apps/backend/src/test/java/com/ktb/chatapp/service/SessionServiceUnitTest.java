@@ -3,6 +3,7 @@ package com.ktb.chatapp.service;
 import com.ktb.chatapp.model.Session;
 import com.ktb.chatapp.service.session.SessionStore;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,10 +17,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("SessionService 단위 테스트")
@@ -131,5 +135,31 @@ class SessionServiceUnitTest {
         SessionData result = sessionService.getActiveSession(USER_ID);
 
         assertThat(result).isNull();
+    }
+
+    @Test
+    @DisplayName("Socket.IO 활동 갱신은 30초 안에 중복 저장하지 않는다")
+    void touchSessionIfDue_CoalescesRepeatedActivity() {
+        when(sessionStore.touch(anyString(), anyString(), anyLong(), any(Duration.class)))
+                .thenReturn(true);
+
+        assertThat(sessionService.touchSessionIfDue(USER_ID, SESSION_ID)).isTrue();
+        assertThat(sessionService.touchSessionIfDue(USER_ID, SESSION_ID)).isTrue();
+
+        verify(sessionStore, times(1))
+                .touch(eq(USER_ID), eq(SESSION_ID), anyLong(), any(Duration.class));
+    }
+
+    @Test
+    @DisplayName("새 sessionId는 이전 세션의 30초 touch gate를 공유하지 않는다")
+    void touchSessionIfDue_DoesNotShareGateAcrossRelogin() {
+        when(sessionStore.touch(anyString(), anyString(), anyLong(), any(Duration.class)))
+                .thenReturn(true);
+
+        assertThat(sessionService.touchSessionIfDue(USER_ID, "old-session")).isTrue();
+        assertThat(sessionService.touchSessionIfDue(USER_ID, "new-session")).isTrue();
+
+        verify(sessionStore).touch(eq(USER_ID), eq("old-session"), anyLong(), any(Duration.class));
+        verify(sessionStore).touch(eq(USER_ID), eq("new-session"), anyLong(), any(Duration.class));
     }
 }

@@ -100,10 +100,13 @@ public class RoomController {
     })
     @GetMapping
     @RateLimit
-    public ResponseEntity<?> getAllRooms(Principal principal) {
+    public ResponseEntity<?> getAllRooms(
+            Principal principal,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
 
         try {
-            RoomsResponse response = roomService.getAllRooms(principal.getName());
+            RoomsResponse response = roomService.getAllRooms(principal.getName(), page, size);
 
             // 캐시 설정
             return ResponseEntity.ok()
