@@ -22,10 +22,6 @@ const Login = () => {
   });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [serverStatus, setServerStatus] = useState({
-    checking: typeof window !== 'undefined', // 클라이언트에서만 체크
-    connected: false
-  });
   // 서버 생존 확인 결과는 로그인 시도 결과와 섞지 않는다.
   // 한 요소로 합치면 연결 경고가 로그인 실패로 오인된다.
   const [serverNotice, setServerNotice] = useState(null);
@@ -39,20 +35,21 @@ const Login = () => {
       return;
     }
 
+    let active = true;
+
     const checkServerConnection = async () => {
       try {
         await authService.checkServerConnection();
-        setServerStatus({ checking: false, connected: true });
+        if (active) {
+          setServerNotice(null);
+        }
       } catch (error) {
-
-        // 개발 환경에서는 더 관대하게 처리
-        if (process.env.NODE_ENV === 'development') {
-          setServerStatus({ checking: false, connected: true });
-          setServerNotice('개발 환경: 서버 연결을 확인할 수 없지만 계속 진행합니다. 백엔드 서버가 실행 중인지 확인해주세요.');
-        } else {
-          // 프로덕션에서는 연결 실패해도 페이지는 보여주되, 경고만 표시
-          setServerStatus({ checking: false, connected: false });
-          setServerNotice('서버와의 연결을 확인할 수 없습니다. 로그인을 시도해보세요. 문제가 지속되면 새로고침해주세요.');
+        if (active) {
+          setServerNotice(
+            process.env.NODE_ENV === 'development'
+              ? '개발 환경: 서버 연결을 확인할 수 없지만 계속 진행합니다. 백엔드 서버가 실행 중인지 확인해주세요.'
+              : '서버와의 연결을 확인할 수 없습니다. 로그인을 시도해보세요. 문제가 지속되면 새로고침해주세요.'
+          );
         }
       }
     };
@@ -62,14 +59,9 @@ const Login = () => {
       checkServerConnection();
     }, 100);
 
-    // fallback으로 4초 후에는 무조건 체크 완료로 처리 (authService timeout 3초 + 여유시간)
-    const fallbackTimer = setTimeout(() => {
-      setServerStatus(prev => prev.checking ? { checking: false, connected: true } : prev);
-    }, 4000);
-
     return () => {
+      active = false;
       clearTimeout(timer);
-      clearTimeout(fallbackTimer);
     };
   }, []);
 
