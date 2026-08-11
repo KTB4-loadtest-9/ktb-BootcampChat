@@ -15,6 +15,7 @@ import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import com.ktb.chatapp.websocket.socketio.UserRooms;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -125,23 +126,49 @@ class RoomLeaveHandlerTest {
     }
 
     @Test
-    void handleDisconnectRooms_batchesUserAndRoomValidation() {
+    void handleDisconnectRooms_batchesUserAndRoomValidationAndParticipantBroadcast() {
         SocketUser socketUser = new SocketUser("user-1", "tester", "session-1", "socket-1");
         User user = User.builder().id("user-1").name("tester").build();
-        Room room = Room.builder().id("room-1").name("room").participantIds(Set.of("user-1")).build();
+        User remainingUser = User.builder().id("user-2").name("remaining").email("remaining@example.com").build();
+        Room room1Before = Room.builder()
+                .id("room-1")
+                .name("room-1")
+                .participantIds(new HashSet<>(Set.of("user-1", "user-2")))
+                .build();
+        Room room2Before = Room.builder()
+                .id("room-2")
+                .name("room-2")
+                .participantIds(new HashSet<>(Set.of("user-1", "user-2")))
+                .build();
+        Room room1After = Room.builder()
+                .id("room-1")
+                .name("room-1")
+                .participantIds(Set.of("user-2"))
+                .build();
+        Room room2After = Room.builder()
+                .id("room-2")
+                .name("room-2")
+                .participantIds(Set.of("user-2"))
+                .build();
 
         when(client.get("user")).thenReturn(socketUser);
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
-        when(roomRepository.findAllById(any())).thenReturn(List.of(room));
-        when(roomRepository.findById("room-1")).thenReturn(Optional.of(room));
+        when(roomRepository.findAllById(any()))
+                .thenReturn(List.of(room1Before, room2Before), List.of(room1After, room2After));
+        when(userRepository.findAllById(any())).thenReturn(List.of(remainingUser));
         when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(socketIOServer.getRoomOperations("room-1")).thenReturn(roomOperations);
+        when(socketIOServer.getRoomOperations(any())).thenReturn(roomOperations);
 
-        handler.handleDisconnectRooms(client, Set.of("room-1"));
+        handler.handleDisconnectRooms(client, Set.of("room-1", "room-2"));
 
         verify(userRepository).findById("user-1");
-        verify(roomRepository).findAllById(any());
-        verify(roomRepository).findById("room-1");
+        verify(roomRepository, org.mockito.Mockito.times(2)).findAllById(any());
+        verify(roomRepository, never()).findById(any());
+        verify(userRepository).findAllById(Set.of("user-2"));
         verify(roomRepository).removeParticipant("room-1", "user-1");
+        verify(roomRepository).removeParticipant("room-2", "user-1");
+        verify(client).leaveRoom("room-1");
+        verify(client).leaveRoom("room-2");
+        verify(roomOperations, org.mockito.Mockito.times(2)).sendEvent(eq(PARTICIPANTS_UPDATE), any());
     }
 }

@@ -155,6 +155,7 @@ public class RoomService {
         return createRoomOperation(createRoomRequest, name).room();
     }
 
+    @CacheEvict(cacheNames = "rooms", allEntries = true)
     public RoomResponse createRoomResponse(CreateRoomRequest createRoomRequest, String name) {
         return createRoomOperation(createRoomRequest, name).response();
     }
@@ -196,6 +197,7 @@ public class RoomService {
         return operation == null ? null : operation.room();
     }
 
+    @CacheEvict(cacheNames = "rooms", allEntries = true)
     public RoomResponse joinRoomResponse(String roomId, String password, String name) {
         RoomOperation operation = joinRoomOperation(roomId, password, name);
         return operation == null ? null : operation.response();

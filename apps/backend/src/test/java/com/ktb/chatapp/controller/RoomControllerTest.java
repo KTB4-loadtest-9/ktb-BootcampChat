@@ -7,6 +7,7 @@ import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.RecentMessageCounter;
 import com.ktb.chatapp.service.RoomService;
 import java.security.Principal;
+import java.util.HashSet;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -67,7 +69,11 @@ class RoomControllerTest {
         assertThat(roomResponse.getParticipants())
                 .extracting(participantResponse -> participantResponse.getId())
                 .containsExactlyInAnyOrder("creator", "participant");
-        verify(userRepository).findAllById(any());
+        ArgumentCaptor<Iterable<String>> userIdsCaptor = ArgumentCaptor.forClass(Iterable.class);
+        verify(userRepository).findAllById(userIdsCaptor.capture());
+        Set<String> queriedUserIds = new HashSet<>();
+        userIdsCaptor.getValue().forEach(queriedUserIds::add);
+        assertThat(queriedUserIds).contains("creator", "participant");
         verify(userRepository, never()).findById(anyString());
     }
 
