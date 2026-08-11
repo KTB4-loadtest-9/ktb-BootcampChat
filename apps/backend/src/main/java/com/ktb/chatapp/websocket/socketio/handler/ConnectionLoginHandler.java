@@ -155,7 +155,7 @@ public class ConnectionLoginHandler {
                 "timestamp", System.currentTimeMillis()
         ));
         
-        new Thread(() -> {
+        Thread.ofVirtual().name("duplicate-login-notification").start(() -> {
             try {
                 Thread.sleep(Duration.ofSeconds(10));
                 existingClient.sendEvent(SESSION_ENDED, Map.of(
