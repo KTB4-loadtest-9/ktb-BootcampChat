@@ -12,7 +12,7 @@ config:
       contextOptions:
         viewport: null
   ensure:
-    maxErrorRate: 1
+    maxErrorRate: 0
 
 scenarios:
   - name: Full browser journey
