@@ -21,10 +21,16 @@ const hasSameRoomListValues = (currentRoom, nextRoom) =>
 export const useRoomsSocket = ({
   currentUser,
   setConnectionStatus,
+  rooms,
   setRooms,
-  onRoomsChanged,
+  setMetadata,
 }) => {
   const socketRef = useRef(null);
+  const roomsRef = useRef(rooms);
+
+  useEffect(() => {
+    roomsRef.current = rooms;
+  }, [rooms]);
 
   useEffect(() => {
     if (!currentUser?.token) return;
@@ -57,12 +63,43 @@ export const useRoomsSocket = ({
             setConnectionStatus(CONNECTION_STATUS.ERROR);
           },
           roomCreated: (newRoom) => {
-            if (typeof onRoomsChanged === 'function') {
-              onRoomsChanged();
-              return;
-            }
+            if (!newRoom?._id) return;
+            const isNewRoom = !roomsRef.current.some(
+              (room) => room._id === newRoom._id
+            );
 
-            setRooms((prev) => [newRoom, ...prev]);
+            setRooms((prev) => {
+              const existingRoom = prev.find(
+                (room) => room._id === newRoom._id
+              );
+              const mergedRoom = existingRoom
+                ? { ...existingRoom, ...newRoom }
+                : newRoom;
+
+              return [
+                mergedRoom,
+                ...prev.filter((room) => room._id !== newRoom._id),
+              ];
+            });
+
+            if (!isNewRoom) return;
+
+            roomsRef.current = [
+              newRoom,
+              ...roomsRef.current.filter((room) => room._id !== newRoom._id),
+            ];
+            setMetadata((metadata) => {
+              if (!metadata) return metadata;
+
+              const total = metadata.total + 1;
+              const pageSize = metadata.pageSize || 1;
+              return {
+                ...metadata,
+                total,
+                totalPages: Math.ceil(total / pageSize),
+                hasMore: total > (metadata.page + 1) * pageSize,
+              };
+            });
           },
           roomUpdated: (updatedRoom) => {
             if (!updatedRoom?._id) return;

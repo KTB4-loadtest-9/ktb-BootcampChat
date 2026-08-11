@@ -66,14 +66,16 @@ export default function ChatRoomsView({ router }) {
     setRooms,
     error,
     loading,
+    loadingMore,
     refreshing,
     joiningRoomId,
     joinError,
     clearJoinError,
-    pagination,
+    metadata,
+    setMetadata,
     fetchRooms,
     refreshRooms,
-    goToPage,
+    loadMoreRooms,
     handleJoinRoom,
   } = useRoomList({
     currentUser,
@@ -153,8 +155,9 @@ export default function ChatRoomsView({ router }) {
   useRoomsSocket({
     currentUser,
     setConnectionStatus: setSocketConnectionStatus,
+    rooms,
     setRooms,
-    onRoomsChanged: () => refreshRoomsRef.current({ silent: true }),
+    setMetadata,
   });
 
   return (
@@ -285,7 +288,7 @@ export default function ChatRoomsView({ router }) {
           <Box $css={{ padding: '$400' }}>
             <LoadingIndicator text="채팅방 목록을 불러오는 중..." />
           </Box>
-        ) : rooms.length > 0 || pagination?.page > 0 ? (
+        ) : rooms.length > 0 ? (
           <VStack $css={{ gap: '$250', width: '100%' }}>
             <RoomsTable
               rooms={rooms}
@@ -296,7 +299,7 @@ export default function ChatRoomsView({ router }) {
               onJoinRoom={handleJoinRoom}
             />
 
-            {pagination && (
+            {metadata?.hasMore && (
               <HStack
                 $css={{
                   gap: '$200',
@@ -304,29 +307,16 @@ export default function ChatRoomsView({ router }) {
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
-                aria-label="채팅방 페이지 이동"
+                aria-label="채팅방 추가 로드"
               >
-                <Text typography="body2">총 {pagination.total}개</Text>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => goToPage(pagination.page - 1)}
-                  disabled={loading || refreshing || pagination.page <= 0}
-                  data-testid="rooms-previous-page-button"
+                  onClick={loadMoreRooms}
+                  disabled={loadingMore || refreshing}
+                  data-testid="load-more-rooms-button"
                 >
-                  이전
-                </Button>
-                <Text typography="body2" aria-live="polite">
-                  {pagination.page + 1} / {pagination.totalPages}
-                </Text>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => goToPage(pagination.page + 1)}
-                  disabled={loading || refreshing || !pagination.hasMore}
-                  data-testid="rooms-next-page-button"
-                >
-                  다음
+                  {loadingMore ? '불러오는 중...' : '채팅방 더 보기'}
                 </Button>
               </HStack>
             )}

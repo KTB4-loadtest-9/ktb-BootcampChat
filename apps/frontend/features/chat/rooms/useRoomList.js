@@ -2,9 +2,9 @@ import { useState, useCallback, useRef } from 'react';
 import axiosInstance from '@/services/axios';
 import { CONNECTION_STATUS } from './useServerConnection';
 
-const ROOMS_PAGE_SIZE = 10;
+const ROOM_PAGE_SIZE = 20;
 
-const createPagination = (metadata = {}, requestedPage = 0, currentCount = 0) => {
+const createMetadata = (metadata = {}, requestedPage = 0, currentCount = 0) => {
   const normalizedMetadata = metadata ?? {};
   const total =
     Number.isInteger(normalizedMetadata.total) && normalizedMetadata.total >= 0
@@ -14,7 +14,7 @@ const createPagination = (metadata = {}, requestedPage = 0, currentCount = 0) =>
     Number.isInteger(normalizedMetadata.pageSize) &&
     normalizedMetadata.pageSize > 0
       ? normalizedMetadata.pageSize
-      : ROOMS_PAGE_SIZE;
+      : ROOM_PAGE_SIZE;
   const totalPages =
     Number.isInteger(normalizedMetadata.totalPages) &&
     normalizedMetadata.totalPages > 0
@@ -24,7 +24,7 @@ const createPagination = (metadata = {}, requestedPage = 0, currentCount = 0) =>
     Number.isInteger(normalizedMetadata.page) && normalizedMetadata.page >= 0
       ? normalizedMetadata.page
       : requestedPage;
-  const page = Math.min(serverPage, totalPages - 1);
+  const page = serverPage;
 
   return {
     total,
@@ -60,10 +60,24 @@ export const useRoomList = ({
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [joiningRoomId, setJoiningRoomId] = useState(null);
   const [joinError, setJoinError] = useState(null);
-  const [pagination, setPagination] = useState(() => createPagination());
+  const metadataRef = useRef(createMetadata());
+  const [metadata, setMetadataState] = useState(metadataRef.current);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const isLoadingRef = useRef(false);
+  const isLoadingMoreRef = useRef(false);
   const joiningRoomRef = useRef(null);
+
+  const setMetadata = useCallback((nextMetadata) => {
+    setMetadataState((currentMetadata) => {
+      const resolvedMetadata =
+        typeof nextMetadata === 'function'
+          ? nextMetadata(currentMetadata)
+          : nextMetadata;
+      metadataRef.current = resolvedMetadata;
+      return resolvedMetadata;
+    });
+  }, []);
 
   const handleFetchError = useCallback((error) => {
     let errorMessage = '채팅방 목록을 불러오는데 실패했습니다.';
@@ -102,7 +116,7 @@ export const useRoomList = ({
     setConnectionStatus(CONNECTION_STATUS.ERROR);
   }, [isRetrying, setConnectionStatus]);
 
-  const loadRooms = useCallback(async (page = 0) => {
+  const loadRooms = useCallback(async (page = 0, { append = false } = {}) => {
     if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
       await attemptConnection();
     }
@@ -110,7 +124,7 @@ export const useRoomList = ({
     const response = await axiosInstance.get('/api/rooms', {
       params: {
         page,
-        size: ROOMS_PAGE_SIZE,
+        pageSize: ROOM_PAGE_SIZE,
       },
     });
     const payload = response?.data;
@@ -119,12 +133,28 @@ export const useRoomList = ({
       throw new Error('INVALID_RESPONSE');
     }
 
-    setRooms(payload.data);
-    setPagination(createPagination(payload.metadata, page, payload.data.length));
+    if (append) {
+      setRooms((currentRooms) => {
+        const loadedIds = new Set(currentRooms.map((room) => room._id));
+        const uniqueRooms = payload.data.filter(
+          (room) => room?._id && !loadedIds.has(room._id)
+        );
+        return [...currentRooms, ...uniqueRooms];
+      });
+    } else {
+      setRooms(payload.data);
+    }
+    const nextMetadata = createMetadata(
+      payload.metadata,
+      page,
+      payload.data.length
+    );
+    metadataRef.current = nextMetadata;
+    setMetadataState(nextMetadata);
     setConnectionStatus(CONNECTION_STATUS.CONNECTED);
   }, [attemptConnection, connectionStatus, setConnectionStatus]);
 
-  const fetchRooms = useCallback(async (page = pagination.page) => {
+  const fetchRooms = useCallback(async () => {
     if (!currentUser?.token || isLoadingRef.current) {
       return false;
     }
@@ -138,7 +168,7 @@ export const useRoomList = ({
       setLoading(true);
       setError(null);
 
-      await loadRooms(page);
+      await loadRooms(0);
 
       if (isInitialLoad) {
         setIsInitialLoad(false);
@@ -154,7 +184,6 @@ export const useRoomList = ({
     }
   }, [
     currentUser,
-    pagination.page,
     connectionStatus,
     setConnectionStatus,
     isInitialLoad,
@@ -177,7 +206,7 @@ export const useRoomList = ({
         setRefreshing(true);
       }
 
-      await loadRooms(pagination.page);
+      await loadRooms(0);
       setError(null);
 
       return true;
@@ -198,20 +227,38 @@ export const useRoomList = ({
       }
       isLoadingRef.current = false;
     }
-  }, [currentUser, loadRooms, pagination.page]);
+  }, [currentUser, loadRooms]);
 
-  const goToPage = useCallback(async (page) => {
+  const loadMoreRooms = useCallback(async () => {
+    const currentMetadata = metadataRef.current;
     if (
-      !Number.isInteger(page) ||
-      page < 0 ||
-      page >= pagination.totalPages ||
-      page === pagination.page
+      !currentUser?.token ||
+      !currentMetadata?.hasMore ||
+      isLoadingRef.current ||
+      isLoadingMoreRef.current
     ) {
       return false;
     }
 
-    return fetchRooms(page);
-  }, [fetchRooms, pagination.page, pagination.totalPages]);
+    try {
+      isLoadingMoreRef.current = true;
+      setLoadingMore(true);
+      setError(null);
+      await loadRooms((currentMetadata.page ?? 0) + 1, { append: true });
+      return true;
+    } catch (error) {
+      setError({
+        title: '채팅방 추가 로드 실패',
+        message: '채팅방을 더 불러오지 못했습니다. 잠시 후 다시 시도해주세요.',
+        type: 'warning',
+        showRetry: false,
+      });
+      return false;
+    } finally {
+      setLoadingMore(false);
+      isLoadingMoreRef.current = false;
+    }
+  }, [currentUser, loadRooms]);
 
   const clearJoinError = useCallback((roomId) => {
     setJoinError((current) => (
@@ -299,10 +346,12 @@ export const useRoomList = ({
     joiningRoomId,
     joinError,
     clearJoinError,
-    pagination,
+    metadata,
+    setMetadata,
+    loadingMore,
     fetchRooms,
+    loadMoreRooms,
     refreshRooms,
-    goToPage,
     handleJoinRoom,
   };
 };
