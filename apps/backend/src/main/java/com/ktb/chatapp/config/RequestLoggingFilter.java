@@ -38,6 +38,13 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+
+        if (response.getStatus() == HttpServletResponse.SC_UNAUTHORIZED) {
+            log.warn("Unauthorized request: method={}, uri={}, status={}",
+                    request.getMethod(),
+                    request.getRequestURI(),
+                    response.getStatus());
+        }
     }
 
     private boolean isDevelopmentMode() {

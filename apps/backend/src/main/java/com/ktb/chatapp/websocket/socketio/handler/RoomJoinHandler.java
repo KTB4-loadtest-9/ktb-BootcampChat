@@ -62,6 +62,8 @@ public class RoomJoinHandler {
                 client.sendEvent(JOIN_ROOM_ERROR, Map.of("message", "채팅방을 찾을 수 없습니다."));
                 return;
             }
+
+            roomRepository.addParticipant(roomId, userId);
             
             // 이미 해당 방에 참여 중인지 확인
             if (userRooms.isInRoom(userId, roomId)) {
@@ -70,8 +72,6 @@ public class RoomJoinHandler {
                 client.sendEvent(JOIN_ROOM_SUCCESS, Map.of("roomId", roomId));
                 return;
             }
-
-            roomRepository.addParticipant(roomId, userId);
 
             // Join socket room and add to user's room set
             client.joinRoom(roomId);
@@ -157,6 +157,7 @@ public class RoomJoinHandler {
                 client.sendEvent(JOIN_ROOM_ERROR, Map.of("message", "채팅방을 찾을 수 없습니다."));
                 return;
             }
+            roomRepository.addParticipant(roomId, userId);
             client.joinRoom(roomId);
             client.sendEvent(JOIN_ROOM_SUCCESS, Map.of("roomId", roomId));
         });

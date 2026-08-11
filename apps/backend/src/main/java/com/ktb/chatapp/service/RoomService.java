@@ -231,11 +231,16 @@ public class RoomService {
             }
         }
 
-        // 이미 참여중인지 확인
-        if (!room.getParticipantIds().contains(user.getId())) {
-            // 채팅방 참여
-            room.getParticipantIds().add(user.getId());
-            room = roomRepository.save(room);
+        Set<String> participantIds = room.getParticipantIds() == null ? Set.of() : room.getParticipantIds();
+        if (!participantIds.contains(user.getId())) {
+            roomRepository.addParticipant(roomId, user.getId());
+            room = roomRepository.findById(roomId).orElse(null);
+            if (room == null) {
+                return null;
+            }
+            if (room.getParticipantIds() == null || !room.getParticipantIds().contains(user.getId())) {
+                throw new IllegalStateException("채팅방 참가 상태를 반영하지 못했습니다.");
+            }
         }
         
         RoomResponse roomResponse = mapToRoomResponse(room, name);

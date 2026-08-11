@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -32,7 +34,7 @@ import org.springframework.http.ContentDisposition;
  *
  * <p>핵심 계약: 비참가자는 스토리지가 오프로딩을 지원하든 말든 <b>URL 발급 전에</b> 거부된다.
  */
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 @DisplayName("FileAccessService 단위 테스트")
 class FileAccessServiceTest {
 
@@ -163,6 +165,19 @@ class FileAccessServiceTest {
     }
 
     @Test
+    @DisplayName("같은 방의 여러 참가자는 동일 첨부파일을 조회할 수 있다")
+    void forView_multipleRoomParticipants_canViewSameFile() {
+        String secondParticipant = "participant-2";
+        DirectStorage storage = new DirectStorage();
+        FileAccessService service = serviceWith(
+                storage, "image/png", Set.of(PARTICIPANT, secondParticipant));
+
+        assertThat(service.forView(FILE_NAME, PARTICIPANT)).isInstanceOf(FileAccess.Stream.class);
+        assertThat(service.forView(FILE_NAME, secondParticipant)).isInstanceOf(FileAccess.Stream.class);
+        assertThat(storage.openCalls).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("미리보기 미지원 형식은 view에서 PreviewNotSupportedException")
     void forView_nonPreviewableMimetype_throwsPreviewNotSupported() {
         DirectStorage storage = new DirectStorage();
@@ -181,6 +196,22 @@ class FileAccessServiceTest {
 
         assertThatThrownBy(() -> service.forView(FILE_NAME, OUTSIDER))
                 .hasMessage("파일에 접근할 권한이 없습니다");
+    }
+
+    @Test
+    @DisplayName("파일 권한 거부 로그에 인가 경로 ID를 남긴다")
+    void forView_nonParticipant_logsAuthorizationContext(CapturedOutput output) {
+        FileAccessService service = serviceWith(new DirectStorage(), "image/png");
+
+        assertThatThrownBy(() -> service.forView(FILE_NAME, OUTSIDER))
+                .hasMessage("파일에 접근할 권한이 없습니다");
+
+        assertThat(output)
+                .contains("requesterId=" + OUTSIDER)
+                .contains("fileId=" + FILE_ID)
+                .contains("messageId=message-id")
+                .contains("roomId=" + ROOM_ID)
+                .contains("participantIds=[" + PARTICIPANT + "]");
     }
 
     @Test
@@ -206,11 +237,16 @@ class FileAccessServiceTest {
     }
 
     private FileAccessService serviceWith(StoragePort storagePort, String mimetype) {
+        return serviceWith(storagePort, mimetype, Set.of(PARTICIPANT));
+    }
+
+    private FileAccessService serviceWith(
+            StoragePort storagePort, String mimetype, Set<String> participantIds) {
         when(fileRepository.findByFilename(FILE_NAME)).thenReturn(Optional.of(fileEntity(mimetype)));
         when(messageRepository.findByFileId(FILE_ID)).thenReturn(Optional.of(
                 Message.builder().id("message-id").roomId(ROOM_ID).fileId(FILE_ID).build()));
         when(roomRepository.findById(ROOM_ID)).thenReturn(Optional.of(
-                Room.builder().id(ROOM_ID).participantIds(Set.of(PARTICIPANT)).build()));
+                Room.builder().id(ROOM_ID).participantIds(participantIds).build()));
         return new FileAccessService(storagePort, fileRepository, messageRepository, roomRepository);
     }
 
