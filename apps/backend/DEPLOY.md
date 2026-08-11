@@ -113,7 +113,7 @@ tail -f logs/app.log
    ENCRYPTION_SALT=your_encryption_salt_32_hex_chars
 
    # 데이터베이스
-   MONGO_URI=mongodb://localhost:27017/bootcamp-chat
+   MONGO_URI=mongodb://localhost:27017/bootcamp-chat?maxPoolSize=20
    REDIS_HOST=localhost
    REDIS_PORT=6379
 
