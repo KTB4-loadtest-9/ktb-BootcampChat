@@ -21,6 +21,9 @@ public final class FileUrl {
         if (key == null || key.isEmpty()) {
             return key;
         }
+        if (key.startsWith("https://") || key.startsWith("http://")) {
+            return key;
+        }
         return PREFIX + key;
     }
 }

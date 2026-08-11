@@ -26,4 +26,11 @@ class FileUrlTest {
         assertThat(FileUrl.of(null)).isNull();
         assertThat(FileUrl.of("")).isEmpty();
     }
+
+    @Test
+    @DisplayName("of()는 CloudFront 절대 URL을 그대로 통과시킨다")
+    void of_passesThroughAbsoluteUrl() {
+        assertThat(FileUrl.of("https://images.example.com/profiles/user/avatar.png"))
+                .isEqualTo("https://images.example.com/profiles/user/avatar.png");
+    }
 }

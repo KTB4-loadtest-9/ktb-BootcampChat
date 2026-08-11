@@ -21,4 +21,8 @@ public class ProfileImageResponse {
                 FileUrl.of(profileImageKey)
         );
     }
+
+    public static ProfileImageResponse updatedUrl(String imageUrl) {
+        return new ProfileImageResponse(true, "프로필 이미지가 업데이트되었습니다.", imageUrl);
+    }
 }

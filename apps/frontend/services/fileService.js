@@ -9,6 +9,10 @@ class FileService {
     this.retryAttempts = 3;
     this.retryDelay = 1000;
     this.activeUploads = new Map();
+    this.directImageUploadEnabled = process.env.NEXT_PUBLIC_DIRECT_IMAGE_UPLOAD_ENABLED === 'true';
+    this.accessUrlCache = new Map();
+    this.pendingAccessUrls = new Map();
+    this.accessUrlFlushScheduled = false;
 
     this.allowedTypes = {
       image: {
@@ -75,6 +79,9 @@ class FileService {
   }
 
   async uploadFile(file, onProgress, token, sessionId) {
+    if (this.directImageUploadEnabled && file?.type?.startsWith('image/')) {
+      return this.uploadChatImageDirect(file, onProgress);
+    }
     const validationResult = await this.validateFile(file);
     if (!validationResult.success) {
       return validationResult;
@@ -147,6 +154,85 @@ class FileService {
       }
 
       return this.handleUploadError(error);
+    }
+  }
+
+  async uploadChatImageDirect(file, onProgress) {
+    const validationResult = await this.validateFile(file);
+    if (!validationResult.success) return validationResult;
+    if (!file.type.startsWith('image/')) return this.uploadFile(file, onProgress);
+
+    const source = CancelToken.source();
+    this.activeUploads.set(file.name, source);
+    try {
+      const presign = await axiosInstance.post('/api/files/chat-images/presign', {
+        originalName: file.name,
+        contentType: file.type,
+        size: file.size,
+      });
+      const { uploadId, uploadUrl, requiredHeaders = {} } = presign.data;
+      await axios.put(uploadUrl, file, {
+        headers: requiredHeaders,
+        cancelToken: source.token,
+        timeout: 30000,
+        onUploadProgress: (event) => onProgress?.(Math.round((event.loaded * 100) / event.total)),
+      });
+      // Preserve the legacy E2E-visible URI while keeping image bytes on the
+      // browser-to-S3 path. This request only verifies and commits metadata.
+      const completed = await axiosInstance.post('/api/files/upload', {
+        uploadId,
+        uploadType: 'PRESIGNED_CHAT_IMAGE',
+      });
+      return { success: true, data: { file: completed.data.file } };
+    } catch (error) {
+      if (isCancel(error)) return { success: false, message: '업로드가 취소되었습니다.' };
+      return this.handleUploadError(error);
+    } finally {
+      this.activeUploads.delete(file.name);
+    }
+  }
+
+  async uploadChatFile(file, onProgress, token, sessionId) {
+    return this.uploadFile(file, onProgress, token, sessionId);
+  }
+
+  async getAuthorizedImageUrl(file, token, sessionId) {
+    if (!this.directImageUploadEnabled || !file?._id || !file?.mimetype?.startsWith('image/')) {
+      return this.getPreviewUrl(file, token, sessionId, true);
+    }
+    const cached = this.accessUrlCache.get(file._id);
+    if (cached && cached.expiresAt - Date.now() > 30000) return cached.url;
+    return new Promise((resolve, reject) => {
+      const waiters = this.pendingAccessUrls.get(file._id) || [];
+      waiters.push({ resolve, reject });
+      this.pendingAccessUrls.set(file._id, waiters);
+      if (!this.accessUrlFlushScheduled) {
+        this.accessUrlFlushScheduled = true;
+        queueMicrotask(() => this.flushAccessUrlRequests());
+      }
+    });
+  }
+
+  async flushAccessUrlRequests() {
+    this.accessUrlFlushScheduled = false;
+    const pending = this.pendingAccessUrls;
+    this.pendingAccessUrls = new Map();
+    const ids = [...pending.keys()];
+    try {
+      const response = await axiosInstance.post('/api/files/chat-images/access-urls', { fileIds: ids });
+      const byId = new Map((response.data?.items || []).map((item) => [item.fileId, item]));
+      ids.forEach((id) => {
+        const item = byId.get(id);
+        if (item?.url) {
+          this.accessUrlCache.set(id, { url: item.url, expiresAt: new Date(item.expiresAt).getTime() });
+          pending.get(id).forEach(({ resolve }) => resolve(item.url));
+        } else {
+          const error = new Error(item?.error || '이미지 접근 URL을 발급할 수 없습니다.');
+          pending.get(id).forEach(({ reject }) => reject(error));
+        }
+      });
+    } catch (error) {
+      pending.forEach((waiters) => waiters.forEach(({ reject }) => reject(error)));
     }
   }
   getFileUrl(filename, forPreview = false) {

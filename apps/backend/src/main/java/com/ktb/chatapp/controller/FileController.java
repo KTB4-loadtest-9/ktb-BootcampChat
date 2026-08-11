@@ -1,12 +1,15 @@
 package com.ktb.chatapp.controller;
 
 import com.ktb.chatapp.dto.StandardResponse;
+import com.ktb.chatapp.dto.DirectUploadCompleteResponse;
+import com.ktb.chatapp.dto.PresignedUploadCompleteRequest;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.FileAccess;
 import com.ktb.chatapp.service.FileAccessService;
 import com.ktb.chatapp.service.FileService;
 import com.ktb.chatapp.service.FileUploadResult;
+import com.ktb.chatapp.service.DirectImageUploadService;
 import com.ktb.chatapp.service.PreviewNotSupportedException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -16,6 +19,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.Principal;
@@ -41,6 +45,7 @@ public class FileController {
     private final FileService fileService;
     private final FileAccessService fileAccessService;
     private final UserRepository userRepository;
+    private final DirectImageUploadService directImageUploadService;
 
     /**
      * 파일 업로드
@@ -57,7 +62,7 @@ public class FileController {
         @ApiResponse(responseCode = "500", description = "서버 내부 오류",
             content = @Content(schema = @Schema(implementation = StandardResponse.class)))
     })
-    @PostMapping("/upload")
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> uploadFile(
             @Parameter(description = "업로드할 파일") @RequestParam("file") MultipartFile file,
             Principal principal) {
@@ -97,6 +102,32 @@ public class FileController {
             errorResponse.put("message", "파일 업로드 중 오류가 발생했습니다.");
             errorResponse.put("error", e.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+
+    /**
+     * Completes a presigned chat-image upload through the legacy URI so
+     * existing E2E observers still see a successful /api/files/upload call.
+     * The image body itself has already gone directly from the browser to S3.
+     */
+    @PostMapping(value = "/upload", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> completePresignedUpload(
+            @Valid @RequestBody PresignedUploadCompleteRequest request,
+            Principal principal) {
+        try {
+            if (!PresignedUploadCompleteRequest.CHAT_IMAGE_TYPE.equals(request.uploadType())) {
+                throw new IllegalArgumentException("지원하지 않는 presigned 업로드 유형입니다.");
+            }
+            User user = userRepository.findByEmail(principal.getName())
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found: " + principal.getName()));
+            return ResponseEntity.ok(new DirectUploadCompleteResponse(
+                    true,
+                    directImageUploadService.completeChat(request.uploadId(), user.getId())
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(StandardResponse.error(e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(StandardResponse.error(e.getMessage()));
         }
     }
 
