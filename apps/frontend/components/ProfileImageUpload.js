@@ -6,7 +6,6 @@ import CustomAvatar from '@/components/CustomAvatar';
 import { Toast } from '@/components/Toast';
 import api from '@/lib/api/client';
 import { saveStoredUser } from '@/lib/auth/authStorage';
-import profileImageService from '@/services/profileImageService';
 
 const ProfileImageUpload = ({ currentImage, onImageChange }) => {
   const { user } = useAuth();
@@ -56,19 +55,20 @@ const ProfileImageUpload = ({ currentImage, onImageChange }) => {
         throw new Error('인증 정보가 없습니다.');
       }
 
-      const presign = await api.post('/api/users/profile-image/presign', {
-        originalName: file.name,
-        contentType: file.type,
-        size: file.size,
-      });
-      await fetch(presign.data.uploadUrl, {
-        method: 'PUT',
-        headers: presign.data.requiredHeaders,
-        body: file,
-      }).then((result) => {
-        if (!result.ok) throw new Error('S3 이미지 업로드에 실패했습니다.');
-      });
-      const response = await api.post(`/api/users/profile-image/${presign.data.uploadId}/complete`);
+      // FormData 생성
+      const formData = new FormData();
+      formData.append('profileImage', file);
+
+      // 파일 업로드 요청
+      const response = await api.post(
+        '/api/users/profile-image',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
 
       const data = response.data;
 
@@ -81,7 +81,6 @@ const ProfileImageUpload = ({ currentImage, onImageChange }) => {
         profileImage: data.imageUrl
       };
       saveStoredUser(updatedUser);
-      profileImageService.invalidate(user.id || user._id);
 
       onImageChange(data.imageUrl);
 
@@ -124,7 +123,6 @@ const ProfileImageUpload = ({ currentImage, onImageChange }) => {
         profileImage: ''
       };
       saveStoredUser(updatedUser);
-      profileImageService.invalidate(user.id || user._id);
 
       // 기존 objectUrl 정리
       if (previewUrl && previewUrl.startsWith('blob:')) {

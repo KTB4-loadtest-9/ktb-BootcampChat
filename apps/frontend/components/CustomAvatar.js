@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, forwardRef } from 'react';
 import { Avatar } from '@vapor-ui/core';
 import { generateColorFromEmail, getContrastTextColor } from '@/utils/colorUtils';
 import { loadStoredUser } from '@/lib/auth/authStorage';
-import profileImageService from '@/services/profileImageService';
 
 /**
  * CustomAvatar 컴포넌트
@@ -38,22 +37,33 @@ const CustomAvatar = forwardRef(({
   const backgroundColor = generateColorFromEmail(user?.email);
   const color = getContrastTextColor(backgroundColor);
 
-  // 프로필 이미지는 공개 경로를 직접 조립하지 않고 인증된 access URL을 발급받는다.
+  // 프로필 이미지 URL 생성 (memoized)
+  const getImageUrl = useCallback((imagePath) => {
+    // src prop이 직접 제공된 경우
+    if (src) return src;
+    
+    if (!imagePath) return null;
+    
+    // 이미 전체 URL인 경우
+    if (imagePath.startsWith('http')) {
+      return imagePath;
+    }
+    // API URL과 결합 필요한 경우
+    return `${process.env.NEXT_PUBLIC_API_URL}${imagePath}`;
+  }, [src]);
+
+  // persistent 모드: 프로필 이미지 URL 처리
   useEffect(() => {
-    let active = true;
-    profileImageService.getUrl({
-      id: user?.id,
-      _id: user?._id,
-      profileImage: user?.profileImage,
-    }, src)
-      .then((imageUrl) => {
-        if (!active) return;
-        setImageError(false);
-        setCurrentImage(imageUrl || '');
-      })
-      .catch(() => active && setImageError(true));
-    return () => { active = false; };
-  }, [user?.id, user?._id, user?.profileImage, src]);
+    if (!persistent) return;
+
+    const imageUrl = getImageUrl(user?.profileImage);
+    if (imageUrl && imageUrl !== currentImage) {
+      setImageError(false);
+      setCurrentImage(imageUrl);
+    } else if (!imageUrl) {
+      setCurrentImage('');
+    }
+  }, [persistent, user?.profileImage, getImageUrl, currentImage]);
 
   // persistent 모드: 전역 프로필 업데이트 리스너
   useEffect(() => {
@@ -64,13 +74,9 @@ const CustomAvatar = forwardRef(({
         const updatedUser = loadStoredUser() || {};
         // 현재 사용자의 프로필이 업데이트된 경우에만 이미지 업데이트
         if (user?.id === updatedUser.id && updatedUser.profileImage !== user.profileImage) {
-          profileImageService.invalidate(updatedUser.id || updatedUser._id);
-          profileImageService.getUrl(updatedUser)
-            .then((newImageUrl) => {
-              setImageError(false);
-              setCurrentImage(newImageUrl || '');
-            })
-            .catch(() => setImageError(true));
+          const newImageUrl = getImageUrl(updatedUser.profileImage);
+          setImageError(false);
+          setCurrentImage(newImageUrl);
         }
       } catch (error) {
         console.error('Profile update handling error:', error);
@@ -81,25 +87,31 @@ const CustomAvatar = forwardRef(({
     return () => {
       window.removeEventListener('userProfileUpdate', handleProfileUpdate);
     };
-  }, [persistent, user?.id, user?.profileImage]);
+  }, [persistent, getImageUrl, user?.id, user?.profileImage]);
 
   // 이미지 에러 핸들러
   const handleImageError = useCallback((e) => {
+    if (!persistent) return;
+    
     e.preventDefault();
     setImageError(true);
 
     console.debug('Avatar image load failed:', {
       user: user?.name,
       email: user?.email,
-      imageUrl: currentImage
+      imageUrl: persistent ? currentImage : getImageUrl(user?.profileImage)
     });
-  }, [currentImage, user?.name, user?.email]);
+  }, [persistent, currentImage, user?.name, user?.email, user?.profileImage, getImageUrl]);
 
   // 최종 이미지 URL 결정
   const finalImageUrl = (() => {
     if (!showImage) return undefined;
     
-    return currentImage && !imageError ? currentImage : undefined;
+    if (persistent) {
+      return currentImage && !imageError ? currentImage : undefined;
+    }
+    
+    return getImageUrl(user?.profileImage);
   })();
 
   // 사용자 이름 첫 글자
@@ -128,7 +140,7 @@ const CustomAvatar = forwardRef(({
     >
       {finalImageUrl && (
         <Avatar.ImagePrimitive 
-          onError={handleImageError}
+          onError={persistent ? handleImageError : undefined}
           alt={imageAlt}
         />
       )}

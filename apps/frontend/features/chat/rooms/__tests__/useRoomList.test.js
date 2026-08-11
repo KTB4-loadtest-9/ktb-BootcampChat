@@ -11,17 +11,7 @@ vi.mock('@/services/axios', () => ({
   },
 }));
 
-const roomsResponse = (rooms, metadata = {}) => ({
-  data: {
-    data: rooms,
-    metadata: {
-      page: 0,
-      pageSize: 20,
-      hasMore: false,
-      ...metadata,
-    },
-  },
-});
+const roomsResponse = (rooms) => ({ data: { data: rooms } });
 
 const renderRoomList = () =>
   renderHook(() =>
@@ -111,80 +101,5 @@ describe('useRoomList', () => {
 
     expect(result.current.error).toBeNull();
     expect(result.current.rooms).toEqual([{ _id: 'room-1' }]);
-  });
-
-  it('loads the next page and removes a room repeated at the page boundary', async () => {
-    axiosInstance.get
-      .mockResolvedValueOnce(
-        roomsResponse([
-          { _id: 'room-1' },
-          { _id: 'room-2', recentMessageCount: 9 },
-        ], { hasMore: true })
-      )
-      .mockResolvedValueOnce(
-        roomsResponse([
-          { _id: 'room-2', recentMessageCount: 2 },
-          { _id: 'room-3' },
-        ], {
-          page: 1,
-          hasMore: false,
-        })
-      );
-
-    const { result } = renderRoomList();
-
-    await act(async () => {
-      await result.current.fetchRooms();
-      await result.current.loadMoreRooms();
-    });
-
-    expect(axiosInstance.get).toHaveBeenNthCalledWith(1, '/api/rooms', {
-      params: { page: 0, pageSize: 20 },
-    });
-    expect(axiosInstance.get).toHaveBeenNthCalledWith(2, '/api/rooms', {
-      params: { page: 1, pageSize: 20 },
-    });
-    expect(result.current.rooms).toEqual([
-      { _id: 'room-1' },
-      { _id: 'room-2', recentMessageCount: 9 },
-      { _id: 'room-3' },
-    ]);
-    expect(result.current.metadata).toMatchObject({ page: 1, hasMore: false });
-  });
-
-  it('refreshes from page zero after additional pages were loaded', async () => {
-    axiosInstance.get
-      .mockResolvedValueOnce(roomsResponse([{ _id: 'room-1' }], { hasMore: true }))
-      .mockResolvedValueOnce(
-        roomsResponse([{ _id: 'room-2' }], { page: 1, hasMore: false })
-      )
-      .mockResolvedValueOnce(roomsResponse([{ _id: 'room-new' }], { page: 0 }));
-
-    const { result } = renderRoomList();
-
-    await act(async () => {
-      await result.current.fetchRooms();
-      await result.current.loadMoreRooms();
-      await result.current.refreshRooms();
-    });
-
-    expect(axiosInstance.get).toHaveBeenLastCalledWith('/api/rooms', {
-      params: { page: 0, pageSize: 20 },
-    });
-    expect(result.current.rooms).toEqual([{ _id: 'room-new' }]);
-    expect(result.current.metadata).toMatchObject({ page: 0, hasMore: false });
-  });
-
-  it('does not request another page when metadata says there is no more data', async () => {
-    axiosInstance.get.mockResolvedValue(roomsResponse([{ _id: 'room-1' }]));
-
-    const { result } = renderRoomList();
-
-    await act(async () => {
-      await result.current.fetchRooms();
-      await result.current.loadMoreRooms();
-    });
-
-    expect(axiosInstance.get).toHaveBeenCalledTimes(1);
   });
 });

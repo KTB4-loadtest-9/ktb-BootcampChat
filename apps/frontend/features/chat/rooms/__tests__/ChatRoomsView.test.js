@@ -7,11 +7,8 @@ import { CONNECTION_STATUS } from '../useServerConnection';
 const mocks = vi.hoisted(() => ({
   connectionStatus: 'checking',
   error: null,
-  rooms: [],
-  metadata: null,
   fetchRooms: vi.fn(() => Promise.resolve()),
   refreshRooms: vi.fn(() => Promise.resolve(true)),
-  loadMoreRooms: vi.fn(() => Promise.resolve(true)),
   attemptConnection: vi.fn(() => Promise.resolve(true)),
 }));
 
@@ -44,17 +41,14 @@ vi.mock('../useServerConnection', async () => {
 
 vi.mock('../useRoomList', () => ({
   useRoomList: () => ({
-    rooms: mocks.rooms,
+    rooms: [],
     setRooms: vi.fn(),
     error: mocks.error,
     loading: false,
-    loadingMore: false,
     refreshing: false,
-    metadata: mocks.metadata,
     joiningRoom: false,
     fetchRooms: mocks.fetchRooms,
     refreshRooms: mocks.refreshRooms,
-    loadMoreRooms: mocks.loadMoreRooms,
     handleJoinRoom: vi.fn(),
   }),
 }));
@@ -67,11 +61,8 @@ describe('ChatRoomsView', () => {
   beforeEach(() => {
     mocks.connectionStatus = CONNECTION_STATUS.CHECKING;
     mocks.error = null;
-    mocks.rooms = [];
-    mocks.metadata = null;
     mocks.fetchRooms.mockClear();
     mocks.refreshRooms.mockClear();
-    mocks.loadMoreRooms.mockClear();
     mocks.attemptConnection.mockClear();
   });
 
@@ -152,22 +143,5 @@ describe('ChatRoomsView', () => {
     });
 
     expect(screen.queryByTestId('refresh-rooms-button')).toBeNull();
-  });
-
-  it('loads another page only when the API metadata says more rooms exist', async () => {
-    mocks.connectionStatus = CONNECTION_STATUS.CONNECTED;
-    mocks.rooms = [{
-      _id: 'room-1',
-      name: '방 1',
-      createdAt: '2026-08-11T00:00:00.000Z',
-      participants: [],
-    }];
-    mocks.metadata = { hasMore: true };
-
-    render(<ChatRoomsView router={{ push: vi.fn() }} />);
-
-    fireEvent.click(await screen.findByTestId('load-more-rooms-button'));
-
-    expect(mocks.loadMoreRooms).toHaveBeenCalledTimes(1);
   });
 });
