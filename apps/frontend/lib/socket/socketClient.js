@@ -115,6 +115,7 @@ export const createSocketClient = (service = socketService) => ({
   disconnect: () => service.disconnect(),
   isConnected: () => service.isConnected(),
   canSend: () => service.isConnected(),
+  subscribeConnectionState: (handler) => service.subscribeConnectionState(handler),
   send: (event, data) => service.send(event, data),
   sendChatMessage: (payload, socket) => sendDomainEvent(service, socket, 'chatMessage', payload),
   sendChatMessageAndWait: (payload, socket, { timeoutMs = 8000 } = {}) =>

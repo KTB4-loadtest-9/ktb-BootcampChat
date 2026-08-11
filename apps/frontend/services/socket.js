@@ -17,6 +17,21 @@ export class SocketService {
     this.connectionTimeout = null;
     this.retryDelay = 1000;
     this.connected = false;
+    this.connectionStateListeners = new Set();
+  }
+
+  notifyConnectionState() {
+    const connected = this.isConnected();
+    for (const listener of this.connectionStateListeners) {
+      listener(connected);
+    }
+  }
+
+  subscribeConnectionState(listener) {
+    this.connectionStateListeners.add(listener);
+    return () => {
+      this.connectionStateListeners.delete(listener);
+    };
   }
 
   async connect(options = {}) {
@@ -110,6 +125,7 @@ export class SocketService {
       this.connected = true;
       this.reconnectAttempts = 0;
       this.isReconnecting = false;
+      this.notifyConnectionState();
       resolve(socket);
     });
 
@@ -119,6 +135,7 @@ export class SocketService {
       }
 
       this.connected = false;
+      this.notifyConnectionState();
       this.cleanup(CLEANUP_REASONS.DISCONNECT);
     });
 
@@ -171,6 +188,7 @@ export class SocketService {
       this.connected = true;
       this.reconnectAttempts = 0;
       this.isReconnecting = false;
+      this.notifyConnectionState();
     });
 
     socket.io.on('reconnect_failed', () => {
@@ -197,6 +215,7 @@ export class SocketService {
     if (socket === this.socket) {
       this.socket = null;
       this.connected = false;
+      this.notifyConnectionState();
     }
 
     socket.disconnect();
@@ -232,6 +251,7 @@ export class SocketService {
       this.isReconnecting = false;
       this.connectionPromise = null;
       this.connected = false;
+      this.notifyConnectionState();
     }
   }
 

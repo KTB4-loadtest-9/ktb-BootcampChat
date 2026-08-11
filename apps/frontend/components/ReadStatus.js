@@ -15,8 +15,10 @@ const ReadStatus = ({
   currentUserId = null // 현재 사용자 ID 추가
 }) => {
   const [hasMarkedAsRead, setHasMarkedAsRead] = useState(false);
+  const [retryWhenConnected, setRetryWhenConnected] = useState(false);
   const isMountedRef = useRef(true);
   const markingAsReadRef = useRef(false);
+  const checkConnectionBeforeRetryRef = useRef(false);
   const statusRef = useRef(null);
 
   useEffect(() => {
@@ -54,11 +56,18 @@ const ReadStatus = ({
   const markMessageAsRead = useCallback(async () => {
     if (!messageId || !currentUserId || markingAsReadRef.current ||
         hasMarkedAsRead || isAlreadyRead ||
-        messageType === 'system' || !socketClient.canSend()) {
+        messageType === 'system') {
+      return;
+    }
+
+    if (!socketClient.canSend()) {
+      checkConnectionBeforeRetryRef.current = true;
+      setRetryWhenConnected(true);
       return;
     }
 
     markingAsReadRef.current = true;
+    setRetryWhenConnected(false);
     setHasMarkedAsRead(true);
     try {
       // 같은 프레임에 읽힌 메시지 ID를 모아 Socket.IO로 한 번에 전송
@@ -68,6 +77,9 @@ const ReadStatus = ({
       markingAsReadRef.current = false;
       if (isMountedRef.current) {
         setHasMarkedAsRead(false);
+        checkConnectionBeforeRetryRef.current =
+          !retryWhenConnected || !socketClient.canSend();
+        setRetryWhenConnected(true);
       }
       console.error('Error marking message as read:', error);
     }
@@ -77,6 +89,43 @@ const ReadStatus = ({
     hasMarkedAsRead,
     isAlreadyRead,
     messageType,
+    retryWhenConnected,
+  ]);
+
+  useEffect(() => {
+    if (
+      !retryWhenConnected ||
+      hasMarkedAsRead ||
+      isAlreadyRead ||
+      messageType === 'system'
+    ) {
+      return;
+    }
+
+    const retryIfSendable = (connected) => {
+      if (!connected || !socketClient.canSend() || !isMountedRef.current) {
+        return;
+      }
+
+      checkConnectionBeforeRetryRef.current = false;
+      setRetryWhenConnected(false);
+      markMessageAsRead();
+    };
+
+    const unsubscribe = socketClient.subscribeConnectionState(retryIfSendable);
+
+    // 실패와 구독 사이에 연결이 복구된 경우에도 재시도를 놓치지 않는다.
+    if (checkConnectionBeforeRetryRef.current && socketClient.canSend()) {
+      retryIfSendable(true);
+    }
+
+    return unsubscribe;
+  }, [
+    retryWhenConnected,
+    hasMarkedAsRead,
+    isAlreadyRead,
+    messageType,
+    markMessageAsRead,
   ]);
 
   // Intersection Observer 설정
