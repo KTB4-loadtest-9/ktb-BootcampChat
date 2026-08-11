@@ -74,7 +74,7 @@ jobs:
           mkdir -p deploy-artifact
           test -s "apps/backend/target/${JAR_NAME}"
           cp "apps/backend/target/${JAR_NAME}" deploy-artifact/backend-pr.jar
-          sha256sum deploy-artifact/backend-pr.jar > deploy-artifact/backend-pr.jar.sha256
+          (cd deploy-artifact && sha256sum backend-pr.jar > backend-pr.jar.sha256)
 
       - name: Upload backend JAR
         uses: actions/upload-artifact@v7
