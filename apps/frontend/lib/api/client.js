@@ -70,9 +70,13 @@ export const createApiClient = ({
     async (error) => {
       const config = error.config || {};
       config.retryCount = config.retryCount || 0;
-      const maxRetries = Number.isInteger(config.maxRetries)
-        ? Math.max(0, config.maxRetries)
-        : RETRY_CONFIG.maxRetries;
+      const requestPath = config.url?.split('?')[0] || '';
+      const isHealthCheck = requestPath.endsWith('/api/health');
+      const maxRetries = isHealthCheck
+        ? 0
+        : Number.isInteger(config.maxRetries)
+          ? Math.max(0, config.maxRetries)
+          : RETRY_CONFIG.maxRetries;
 
       if (isCanceledRequest(error)) {
         return Promise.reject(error);

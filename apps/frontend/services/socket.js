@@ -58,16 +58,20 @@ export class SocketService {
         }
 
         const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+        const {
+          connectionTimeoutMs = 30000,
+          ...socketOptions
+        } = options;
 
         socket = io(socketUrl, {
-          ...options,
           transports: ['websocket', 'polling'],
           reconnection: true,
           reconnectionAttempts: this.maxReconnectAttempts,
           reconnectionDelay: this.retryDelay,
           reconnectionDelayMax: 5000,
           timeout: 20000,
-          forceNew: true
+          forceNew: true,
+          ...socketOptions,
         });
         this.socket = socket;
         this.connectionReject = (error) => rejectConnection(error, socket);
@@ -79,7 +83,7 @@ export class SocketService {
           if (!socket.connected) {
             rejectConnection(new Error('Connection timeout'), socket);
           }
-        }, 30000);
+        }, connectionTimeoutMs);
 
         this.setupEventHandlers(socket, resolveConnection, rejectConnection);
 

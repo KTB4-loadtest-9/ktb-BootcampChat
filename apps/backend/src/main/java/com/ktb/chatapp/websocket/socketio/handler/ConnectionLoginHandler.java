@@ -11,6 +11,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -60,10 +61,18 @@ public class ConnectionLoginHandler {
         String userId = user.id();
         
         try {
+            // 인증 직후의 이벤트 핸들러에서 항상 사용자 정보를 조회할 수 있어야 한다.
+            client.set("user", user);
+
             connectedUsers.withUserLock(userId, () -> {
-                // Redis-backed user room으로 기존 연결에도 중복 로그인을 알린다.
-                notifyDuplicateLogin(client, userId);
-                client.set("user", user);
+                // Redis-backed socket room을 통해 다른 노드의 기존 연결에도 알린다.
+                try {
+                    notifyDuplicateLogin(client, userId);
+                } catch (Exception e) {
+                    // 중복 로그인 알림 실패가 현재 연결의 인증을 무효화해서는 안 된다.
+                    log.warn("Failed to notify duplicate Socket.IO login for user {}", userId, e);
+                }
+
                 connectedUsers.set(userId, user);
 
                 // 재접속 시 기존 참여 방을 한 번에 검증하고 재입장 처리
@@ -145,11 +154,17 @@ public class ConnectionLoginHandler {
         if (socketUser == null) {
             return;
         }
-        BroadcastOperations userOperations = socketIOServer.getRoomOperations(socketRoom(socketUser.socketId()));
+        BroadcastOperations userOperations =
+                socketIOServer.getRoomOperations(socketRoom(socketUser.socketId()));
+        String deviceInfo = Objects.toString(
+                client.getHandshakeData().getHttpHeaders().get("User-Agent"),
+                "unknown"
+        );
+
         // Send duplicate login notification
         userOperations.sendEvent(DUPLICATE_LOGIN, Map.of(
                 "type", "new_login_attempt",
-                "deviceInfo", client.getHandshakeData().getHttpHeaders().get("User-Agent"),
+                "deviceInfo", deviceInfo,
                 "ipAddress", client.getRemoteAddress().toString(),
                 "timestamp", System.currentTimeMillis()
         ));
