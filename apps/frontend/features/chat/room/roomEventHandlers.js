@@ -1,14 +1,23 @@
 import { deriveUniqueSortedMessages } from '../messages/useMessageList';
 
-export const createMessageIndex = messages => new Map(
-  messages.map((message, index) => [message._id, index])
-);
+const hasMessageId = messageId => messageId !== undefined && messageId !== null;
+
+export const createMessageIndex = messages => {
+  const messageIndexById = new Map();
+  for (let index = 0; index < messages.length; index += 1) {
+    const messageId = messages[index]?._id;
+    if (hasMessageId(messageId)) {
+      messageIndexById.set(messageId, index);
+    }
+  }
+  return messageIndexById;
+};
 
 const replaceMessageIndex = (messageIndexById, messages) => {
   messageIndexById.clear();
   for (let index = 0; index < messages.length; index += 1) {
     const messageId = messages[index]?._id;
-    if (messageId) {
+    if (hasMessageId(messageId)) {
       messageIndexById.set(messageId, index);
     }
   }
@@ -57,15 +66,22 @@ export const applyReadReceipts = (
   { userId, messageIds, timestamp },
   messageIndexById,
 ) => {
-  if (!userId || !Array.isArray(messageIds) || messageIds.length === 0) {
+  const validMessageIds = Array.isArray(messageIds)
+    ? messageIds.filter(hasMessageId)
+    : [];
+
+  if (!userId || validMessageIds.length === 0) {
     return messages;
   }
 
   const activeIndex = messageIndexById || createMessageIndex(messages);
   const hasStaleIndex = activeIndex.size !== messages.length ||
-    messageIds.some(messageId => {
+    validMessageIds.some(messageId => {
       const index = activeIndex.get(messageId);
-      return index !== undefined && messages[index]?._id !== messageId;
+      if (index === undefined) {
+        return messages.some(message => message?._id === messageId);
+      }
+      return messages[index]?._id !== messageId;
     });
 
   if (hasStaleIndex) {
@@ -75,7 +91,7 @@ export const applyReadReceipts = (
   let nextMessages = messages;
   const readAt = timestamp || new Date();
 
-  for (const messageId of new Set(messageIds)) {
+  for (const messageId of new Set(validMessageIds)) {
     const index = activeIndex.get(messageId);
     if (index === undefined) continue;
 
