@@ -65,6 +65,7 @@ export class SocketService {
 
         socket = io(socketUrl, {
           transports: ['websocket', 'polling'],
+          tryAllTransports: true,
           reconnection: true,
           reconnectionAttempts: this.maxReconnectAttempts,
           reconnectionDelay: this.retryDelay,
