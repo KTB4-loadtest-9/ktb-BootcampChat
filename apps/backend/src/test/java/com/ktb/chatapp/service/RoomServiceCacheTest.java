@@ -153,6 +153,39 @@ class RoomServiceCacheTest {
         verify(roomRepository, times(2)).findAll(any(Pageable.class));
     }
 
+    @Test
+    void responseMutationsEvictRoomListCache() {
+        User creator = user("user-1", "creator@example.com");
+        User joiner = user("user-2", "joiner@example.com");
+        Room room = Room.builder()
+            .id("room-1")
+            .name("room")
+            .creator(creator.getId())
+            .participantIds(new HashSet<>(Set.of(creator.getId())))
+            .build();
+        when(roomRepository.findAll(any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of()));
+        when(userRepository.findByEmail(creator.getEmail())).thenReturn(Optional.of(creator));
+        when(userRepository.findByEmail(joiner.getEmail())).thenReturn(Optional.of(joiner));
+        when(userRepository.findAllById(any())).thenReturn(List.of(creator, joiner));
+        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> {
+            Room savedRoom = invocation.getArgument(0);
+            if (savedRoom.getId() == null) {
+                savedRoom.setId("room-1");
+            }
+            return savedRoom;
+        });
+        when(roomRepository.findById(room.getId())).thenReturn(Optional.of(room));
+
+        roomService.getAllRooms("viewer@example.com", 0, 10);
+        roomService.createRoomResponse(CreateRoomRequest.builder().name("new room").build(), creator.getEmail());
+        roomService.getAllRooms("viewer@example.com", 0, 10);
+        roomService.joinRoomResponse(room.getId(), null, joiner.getEmail());
+        roomService.getAllRooms("viewer@example.com", 0, 10);
+
+        verify(roomRepository, times(3)).findAll(any(Pageable.class));
+    }
+
     private static User user(String id, String email) {
         return User.builder()
             .id(id)

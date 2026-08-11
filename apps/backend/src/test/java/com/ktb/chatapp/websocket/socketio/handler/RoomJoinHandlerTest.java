@@ -32,9 +32,11 @@ import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.MESSAGE;
 import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.PARTICIPANTS_UPDATE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class RoomJoinHandlerTest {
@@ -88,6 +90,7 @@ class RoomJoinHandlerTest {
                 .build();
         when(client.get("user")).thenReturn(socketUser);
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+        when(userRepository.findAllById(any())).thenReturn(List.of(user));
         when(roomRepository.findById("room-1")).thenReturn(Optional.of(room));
         when(userRooms.isInRoom("user-1", "room-1")).thenReturn(false);
         when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> {
@@ -113,5 +116,26 @@ class RoomJoinHandlerTest {
         verifyNoInteractions(messageLoader);
         verify(roomOperations).sendEvent(MESSAGE, joinMessageResponse);
         verify(roomOperations).sendEvent(eq(PARTICIPANTS_UPDATE), any());
+    }
+
+    @Test
+    void handleReconnectRooms_batchesUserAndRoomValidation() {
+        SocketUser socketUser = new SocketUser("user-1", "tester", "session-1", "socket-1");
+        Room firstRoom = Room.builder().id("room-1").build();
+        Room secondRoom = Room.builder().id("room-2").build();
+
+        when(client.get("user")).thenReturn(socketUser);
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(
+                User.builder().id("user-1").build()));
+        when(roomRepository.findAllById(any())).thenReturn(List.of(firstRoom, secondRoom));
+
+        handler.handleReconnectRooms(client, Set.of("room-1", "room-2"));
+
+        verify(userRepository).findById("user-1");
+        verify(roomRepository).findAllById(any());
+        verify(roomRepository, never()).findById(any());
+        verify(client).joinRoom("room-1");
+        verify(client).joinRoom("room-2");
+        verify(client, times(2)).sendEvent(eq(JOIN_ROOM_SUCCESS), any());
     }
 }

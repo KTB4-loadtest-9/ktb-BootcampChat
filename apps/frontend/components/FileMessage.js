@@ -30,12 +30,11 @@ const FileMessage = ({
   const messageDomRef = useRef(null);
   useEffect(() => {
     if (msg?.file) {
-      const url = fileService.getPreviewUrl(msg.file, user?.token, user?.sessionId, true);
-      setPreviewUrl(url);
-      console.debug('Preview URL generated:', {
-        filename: msg.file.filename,
-        url
-      });
+      let active = true;
+      fileService.getAuthorizedImageUrl(msg.file, user?.token, user?.sessionId)
+        .then((url) => active && setPreviewUrl(url))
+        .catch((error) => active && setError(error.message));
+      return () => { active = false; };
     }
   }, [msg?.file, user?.token, user?.sessionId]);
 
@@ -169,8 +168,6 @@ const FileMessage = ({
       if (!user?.token || !user?.sessionId) {
         throw new Error('인증 정보가 없습니다.');
       }
-
-      const previewUrl = fileService.getPreviewUrl(msg.file, user?.token, user?.sessionId, true);
 
       return (
         <div className="bg-transparent-pattern">

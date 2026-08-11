@@ -3,13 +3,19 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.ktb.chatapp.dto.FileResponse;
 import com.ktb.chatapp.dto.MessageResponse;
 import com.ktb.chatapp.dto.UserResponse;
+import com.ktb.chatapp.model.File;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.FileRepository;
 import com.ktb.chatapp.service.FileUrl;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -33,6 +39,10 @@ public class MessageResponseMapper {
      * @return MessageResponse DTO
      */
     public MessageResponse mapToMessageResponse(Message message, User sender) {
+        return mapToMessageResponse(message, sender, null);
+    }
+
+    MessageResponse mapToMessageResponse(Message message, User sender, Map<String, File> filesById) {
         MessageResponse.MessageResponseBuilder builder = MessageResponse.builder()
                 .id(message.getId())
                 .content(message.getContent())
@@ -55,8 +65,7 @@ public class MessageResponseMapper {
         }
 
         // 파일 정보 설정
-        Optional.ofNullable(message.getFileId())
-                .flatMap(fileRepository::findById)
+        Optional.ofNullable(resolveFile(message.getFileId(), filesById))
                 .map(file -> FileResponse.builder()
                         .id(file.getId())
                         .filename(file.getFilename())
@@ -72,5 +81,25 @@ public class MessageResponseMapper {
         }
 
         return builder.build();
+    }
+
+    Map<String, File> findFilesByIds(Collection<String> fileIds) {
+        if (fileIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return fileRepository.findAllById(fileIds).stream()
+                .collect(Collectors.toMap(File::getId, Function.identity()));
+    }
+
+    private File resolveFile(
+            String fileId,
+            Map<String, File> filesById) {
+        if (fileId == null) {
+            return null;
+        }
+        if (filesById != null) {
+            return filesById.get(fileId);
+        }
+        return fileRepository.findById(fileId).orElse(null);
     }
 }
