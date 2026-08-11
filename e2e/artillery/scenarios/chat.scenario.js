@@ -1,6 +1,6 @@
 const {
     createChatRoomAction,
-    joinFirstChatRoomAction,
+    joinRandomChatRoomAction,
     sendMessageAction,
     sendMultipleMessagesAction,
     uploadFileAction,
@@ -61,8 +61,9 @@ async function chatRoomCreationScenario(page, vuContext) {
  */
 async function massMessageScenario(page, vuContext) {
     try {
-        // 1. 최신 채팅방 입장
-        await joinFirstChatRoomAction(page);
+        // 1. 랜덤 채팅방 입장
+        await joinRandomChatRoomAction(page);
+        await expect(page).toHaveURL(new RegExp(`${BASE_URL}/chat/\\w+`));
 
         // 2. 여러 메시지 연속 전송 (10개)
         console.log(`Sending ${MASS_MESSAGE_COUNT} messages...`);
@@ -78,20 +79,21 @@ async function massMessageScenario(page, vuContext) {
  */
 async function fileUploadScenario(page, vuContext) {
     try {
-        // 1. 최신 채팅방 입장
-        await joinFirstChatRoomAction(page);
+        // 1. 랜덤 채팅방 입장
+        await joinRandomChatRoomAction(page);
+        await expect(page).toHaveURL(new RegExp(`${BASE_URL}/chat/\\w+`));
 
         // 2. 이미지 파일 업로드
         const filePath = path.resolve(__dirname, '../../fixtures/images/profile.jpg');
         const message = `파일 업로드 부하 테스트 ${bannedWordSafeText(Date.now())}`;
 
-        await Promise.all([
-            page.waitForResponse(
-                response => response.url().includes('/api/files/upload') && response.status() === 200,
-                { timeout: 15000 }
-            ),
-            uploadFileAction(page, filePath, message),
-        ]);
+        const uploadPromise = page.waitForResponse(
+            response => response.url().includes('/api/files/upload') && response.status() === 200,
+            { timeout: 15000 }
+        );
+
+        await uploadFileAction(page, filePath, message);
+        await uploadPromise;
 
         await page.waitForTimeout(ACTION_TIMEOUT);
 
@@ -117,8 +119,9 @@ async function forbiddenWordScenario(page, vuContext) {
         : ['b3sig78jv', '9c0hej6x', 'lbl276sz'];
 
     try {
-        // 1. 최신 채팅방 입장
-        await joinFirstChatRoomAction(page);
+        // 1. 랜덤 채팅방 입장
+        await joinRandomChatRoomAction(page);
+        await expect(page).toHaveURL(new RegExp(`${BASE_URL}/chat/\\w+`));
 
         // 2. 금칙어 메시지 전송 시도
         const forbiddenWord = FORBIDDEN_WORDS[Math.floor(Math.random() * FORBIDDEN_WORDS.length)];

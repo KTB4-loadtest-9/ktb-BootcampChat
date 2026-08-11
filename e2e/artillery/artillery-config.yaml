@@ -9,6 +9,7 @@ config:
     playwright:
       launchOptions:
         headless: true
+        slowMo: 100
       contextOptions:
         viewport: null
 
