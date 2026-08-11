@@ -72,6 +72,19 @@ class RoomControllerTest {
     }
 
     @Test
+    void getAllRooms_doesNotLetBrowsersReuseStaleRoomLists() {
+        when(roomService.getAllRooms("user-1", 0, 10)).thenReturn(RoomsResponse.builder()
+                .success(true)
+                .data(List.of())
+                .build());
+
+        ResponseEntity<?> response = controller.getAllRooms(principal("user-1"), 0, 10);
+
+        assertThat(response.getHeaders().getCacheControl()).isEqualTo("no-store");
+        assertThat(response.getHeaders().getFirst("Last-Modified")).isNull();
+    }
+
+    @Test
     void getAllRooms_rejectsPageSizeAboveMaximum() {
         ResponseEntity<?> response = controller.getAllRooms(principal("user-1"), 0, 51);
 

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ktb.chatapp.dto.RoomResponse;
+import com.ktb.chatapp.dto.CreateRoomRequest;
 import com.ktb.chatapp.dto.RoomsResponse;
 import com.ktb.chatapp.model.Room;
 import com.ktb.chatapp.model.User;
@@ -179,6 +180,30 @@ class RoomServiceTest {
         assertThat(response.getData()).isEmpty();
         verify(userRepository, never()).findAllById(any());
         verify(recentMessageCounter, never()).countRecentMessagesByRoomIds(any());
+    }
+
+    @Test
+    void createRoom_usesKnownCreatorWithoutReloadingNewRoomRelations() {
+        User creator = User.builder()
+                .id("creator-1")
+                .name("Creator")
+                .email("creator@example.com")
+                .build();
+        when(userRepository.findByEmail("creator@example.com")).thenReturn(java.util.Optional.of(creator));
+        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> {
+            Room room = invocation.getArgument(0);
+            room.setId("room-1");
+            return room;
+        });
+
+        RoomResponse response = service().createRoomResponse(
+                CreateRoomRequest.builder().name("room").build(),
+                "creator@example.com");
+
+        assertThat(response.getId()).isEqualTo("room-1");
+        assertThat(response.getCreator().getId()).isEqualTo("creator-1");
+        verify(userRepository, never()).findAllById(any());
+        verify(recentMessageCounter, never()).countRecentMessages(anyString());
     }
 
     private RoomService service() {

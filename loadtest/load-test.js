@@ -7,9 +7,13 @@ const { hideBin } = require('yargs/helpers');
 const chalk = require('chalk');
 const Table = require('cli-table3');
 const { CLIENT_EMIT, SERVER_EMIT } = require('./socket-contract');
+const { assertLoadTargetsAllowed, getLoadFailures } = require('./load-policy');
 
 // Parse command line arguments
-const argv = yargs(hideBin(process.argv))
+const cliArgs = hideBin(process.argv);
+if (cliArgs[0] === '--') cliArgs.shift();
+
+const argv = yargs(cliArgs)
   .option('users', {
     alias: 'u',
     description: 'Total number of users to simulate',
@@ -37,12 +41,12 @@ const argv = yargs(hideBin(process.argv))
   .option('api-url', {
     description: 'Backend REST API URL',
     type: 'string',
-    default: 'http://localhost:5001'
+    default: process.env.LOAD_API_URL || 'http://localhost:5001'
   })
   .option('socket-url', {
     description: 'Socket.IO server URL',
     type: 'string',
-    default: 'http://localhost:5002'
+    default: process.env.LOAD_SOCKET_URL || 'http://localhost:5002'
   })
   .option('room-id', {
     description: 'Room ID to send messages to (auto-create if not specified)',
@@ -63,6 +67,16 @@ const argv = yargs(hideBin(process.argv))
   .help()
   .alias('help', 'h')
   .argv;
+
+try {
+  assertLoadTargetsAllowed(
+    [argv.apiUrl, argv.socketUrl],
+    process.env.ALLOW_REMOTE_LOAD === 'true'
+  );
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
 
 class LoadTester {
   constructor(config) {
@@ -505,6 +519,12 @@ class LoadTester {
     // Stop metrics reporting and print final report
     clearInterval(this.metricsInterval);
     this.printMetrics();
+
+    const failures = getLoadFailures(this.metrics, this.config);
+    if (failures.length > 0) {
+      console.error(chalk.bold.red(`\n✗ Load test failed: ${failures.join(', ')}\n`));
+      process.exit(1);
+    }
 
     console.log(chalk.bold.green('\n✓ Load test completed!\n'));
     process.exit(0);

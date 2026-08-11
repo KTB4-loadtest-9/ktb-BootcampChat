@@ -182,7 +182,12 @@ public class RoomService {
 
         Room savedRoom = roomRepository.save(room);
 
-        RoomResponse roomResponse = mapToRoomResponse(savedRoom, name);
+        RoomResponse roomResponse = buildRoomResponse(
+            savedRoom,
+            name,
+            creator,
+            List.of(creator),
+            0);
         // Publish event for room created
         try {
             eventPublisher.publishEvent(new RoomCreatedEvent(this, roomResponse));

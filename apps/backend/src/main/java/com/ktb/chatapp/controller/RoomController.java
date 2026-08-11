@@ -18,7 +18,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.security.Principal;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
@@ -117,8 +116,7 @@ public class RoomController {
 
             // 캐시 설정
             return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(Duration.ofSeconds(10)))
-                .header("Last-Modified", java.time.Instant.now().toString())
+                .cacheControl(CacheControl.noStore())
                 .body(response);
 
         } catch (Exception e) {

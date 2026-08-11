@@ -4,6 +4,7 @@ import com.ktb.chatapp.dto.*;
 import com.ktb.chatapp.event.SessionEndedEvent;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.UserRepository;
+import com.ktb.chatapp.security.AuthenticatedUser;
 import com.ktb.chatapp.service.JwtService;
 import com.ktb.chatapp.service.SessionCreationResult;
 import com.ktb.chatapp.service.SessionMetadata;
@@ -20,6 +21,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -91,9 +93,11 @@ public class AuthController {
         // Handle validation errors
         ResponseEntity<?> errors = getBindingError(bindingResult);
         if (errors != null) return errors;
-        
+
+        String email = registerRequest.getEmail().toLowerCase(Locale.ROOT);
+
         // Check existing user
-        if (userRepository.findByEmail(registerRequest.getEmail()).isPresent()) {
+        if (userRepository.findByEmail(email).isPresent()) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(StandardResponse.error("이미 등록된 이메일입니다."));
         }
@@ -102,18 +106,11 @@ public class AuthController {
             // Create user
             User user = User.builder()
                     .name(registerRequest.getName())
-                    .email(registerRequest.getEmail().toLowerCase())
+                    .email(email)
                     .password(passwordEncoder.encode(registerRequest.getPassword()))
                     .build();
 
             user = userRepository.save(user);
-
-            // Create session with metadata
-            SessionMetadata metadata = new SessionMetadata(
-                    request.getHeader("User-Agent"),
-                    getClientIpAddress(request),
-                    request.getHeader("User-Agent")
-            );
 
             LoginResponse response = LoginResponse.builder()
                     .success(true)
@@ -164,19 +161,15 @@ public class AuthController {
         
         try {
             // Authenticate user
-            User user = userRepository.findByEmail(loginRequest.getEmail().toLowerCase())
-                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
-                            user.getEmail(),
+                            loginRequest.getEmail().toLowerCase(Locale.ROOT),
                             loginRequest.getPassword()
                     )
             );
+            User user = ((AuthenticatedUser) authentication.getPrincipal()).user();
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
-            
-            // 단일 세션 정책을 위해 기존 세션 제거
-            sessionService.removeAllUserSessions(user.getId());
 
             // Create new session
             SessionMetadata metadata = new SessionMetadata(

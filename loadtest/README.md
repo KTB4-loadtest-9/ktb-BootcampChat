@@ -2,6 +2,41 @@
 
 Socket.IO 기반 채팅 애플리케이션의 부하 테스트를 위한 커스텀 Node.js 스크립트입니다.
 
+## 권장 실행 순서
+
+브라우저 `e2e/`는 사용자 회귀 검증용으로 유지하며 1~10 VU까지만 실행합니다. 100~1000 VU 용량 검증은 브라우저를 띄우지 않는 이 디렉터리의 API/Socket.IO 부하기로 분리합니다.
+
+```bash
+cd loadtest
+pnpm --ignore-workspace install --frozen-lockfile
+
+# 1 VU가 실패하면 여기서 중단
+pnpm run test:smoke
+
+# 각 명령은 내부에서 1 VU smoke를 먼저 통과해야 본 부하를 시작
+pnpm run test:100
+pnpm run test:medium  # 200 VU
+pnpm run test:heavy   # 1000 VU
+```
+
+smoke는 인증, 방 생성, Socket.IO 연결·방 참여, 메시지 송수신 중 하나라도 실패하면 종료 코드 1을 반환합니다. 원격 환경은 실수로 부하를 주지 않도록 기본 차단합니다.
+
+```bash
+export LOAD_API_URL=https://api.example.com
+export LOAD_SOCKET_URL=https://socket.example.com
+export ALLOW_REMOTE_LOAD=true  # 인프라팀 승인과 테스트 시간 확정 후에만 설정
+pnpm run test:100
+```
+
+### 5 MiB 이미지 업로드
+
+파일 fixture를 저장소에 추가하지 않고 메모리에서 정확히 5 MiB를 생성합니다. 측정 경로는 기존 multipart `POST /api/files/upload`이며 브라우저, Next.js, Socket.IO는 제외됩니다.
+
+```bash
+pnpm run test:upload:5mb       # 1 VU 확인
+pnpm run test:upload:5mb:100   # 1 VU 성공 후 100회, 동시성 10
+```
+
 ## 테스트 유형 선택 가이드
 
 ### 📊 Batch Load Test (`load-test.js`)
@@ -53,7 +88,7 @@ pnpm run test:rampup  # 500명, ~100개 방까지 점진적 증가, 60초 유지
 
 ```bash
 cd loadtest
-pnpm install
+pnpm --ignore-workspace install --frozen-lockfile
 ```
 
 ## 사용법
@@ -445,7 +480,7 @@ Ramp-Up 테스트에서는 다음 추가 메트릭이 표시됩니다:
 - [x] 복수 방 시뮬레이션 (`ramp-up-test.js`)
 - [x] 읽음 처리 시뮬레이션 (`markMessagesAsRead` → `messagesRead`)
 - [ ] Grafana/Prometheus 메트릭 연동
-- [ ] 파일 업로드 시뮬레이션
+- [x] 5 MiB multipart API 업로드 시뮬레이션 (`file-upload-api-load.js`)
 - [ ] AI 멘션 시뮬레이션
 - [ ] 리액션 시뮬레이션
 
