@@ -1,4 +1,7 @@
 uploads/*
+.env
+.env.*
+!.env.template
 
 # Eclipse JDT / LSP 생성 파일
 .classpath
