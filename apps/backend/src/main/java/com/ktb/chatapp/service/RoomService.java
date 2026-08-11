@@ -35,7 +35,8 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class RoomService {
 
-    private static final int MAX_PAGE_SIZE = 10;
+    public static final int DEFAULT_PAGE_SIZE = 20;
+    public static final int MAX_PAGE_SIZE = 50;
 
     private final RoomRepository roomRepository;
     private final UserRepository userRepository;
@@ -43,16 +44,21 @@ public class RoomService {
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
 
+    public RoomsResponse getAllRooms(String name) {
+        return getAllRooms(name, 0, DEFAULT_PAGE_SIZE);
+    }
+
     @Cacheable(cacheNames = "rooms", unless = "#result == null || !#result.success")
-    public RoomsResponse getAllRooms(String name, int page, int size) {
+    public RoomsResponse getAllRooms(String name, int page, int pageSize) {
 
         try {
             int safePage = Math.max(page, 0);
-            int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+            int safeSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
             Page<Room> roomPage = roomRepository.findAll(PageRequest.of(
                 safePage,
                 safeSize,
-                Sort.by(Sort.Direction.DESC, "createdAt")));
+                Sort.by(Sort.Direction.DESC, "createdAt")
+                    .and(Sort.by(Sort.Direction.ASC, "id"))));
             List<Room> rooms = roomPage.getContent();
             if (rooms.isEmpty()) {
                 return RoomsResponse.builder()
@@ -253,39 +259,55 @@ public class RoomService {
             Room room,
             String name,
             Map<String, User> usersById,
-            Map<String, Integer> recentMessageCounts) {
+            Map<String, Integer> recentMessageCounts
+    ) {
         if (room == null) return null;
 
         User creator = usersById.get(room.getCreator());
+        List<User> participants = room.getParticipantIds() == null
+                ? List.of()
+                : room.getParticipantIds().stream()
+                        .map(usersById::get)
+                        .filter(user -> user != null)
+                        .toList();
 
-        List<User> participants = participantIds(room)
-            .map(usersById::get)
-            .filter(Objects::nonNull)
-            .toList();
+        return buildRoomResponse(
+                room,
+                name,
+                creator,
+                participants,
+                recentMessageCounts.getOrDefault(room.getId(), 0)
+        );
+    }
 
-        int recentMessageCount = recentMessageCounts.getOrDefault(room.getId(), 0);
-
+    private RoomResponse buildRoomResponse(
+            Room room,
+            String name,
+            User creator,
+            List<User> participants,
+            int recentMessageCount
+    ) {
         return RoomResponse.builder()
-            .id(room.getId())
-            .name(room.getName() != null ? room.getName() : "제목 없음")
-            .hasPassword(room.isHasPassword())
-            .creator(creator != null ? UserResponse.builder()
-                .id(creator.getId())
-                .name(creator.getName() != null ? creator.getName() : "알 수 없음")
-                .email(creator.getEmail() != null ? creator.getEmail() : "")
-                .build() : null)
-            .participants(participants.stream()
-                .filter(p -> p != null && p.getId() != null)
-                .map(p -> UserResponse.builder()
-                    .id(p.getId())
-                    .name(p.getName() != null ? p.getName() : "알 수 없음")
-                    .email(p.getEmail() != null ? p.getEmail() : "")
-                    .build())
-                .collect(Collectors.toList()))
-            .createdAtDateTime(room.getCreatedAt())
-            .isCreator(creator != null && creator.getId().equals(name))
-            .recentMessageCount(recentMessageCount)
-            .build();
+                .id(room.getId())
+                .name(room.getName() != null ? room.getName() : "제목 없음")
+                .hasPassword(room.isHasPassword())
+                .creator(creator != null ? UserResponse.builder()
+                        .id(creator.getId())
+                        .name(creator.getName() != null ? creator.getName() : "알 수 없음")
+                        .email(creator.getEmail() != null ? creator.getEmail() : "")
+                        .build() : null)
+                .participants(participants.stream()
+                        .filter(p -> p != null && p.getId() != null)
+                        .map(p -> UserResponse.builder()
+                                .id(p.getId())
+                                .name(p.getName() != null ? p.getName() : "알 수 없음")
+                                .email(p.getEmail() != null ? p.getEmail() : "")
+                                .build())
+                        .collect(Collectors.toList()))
+                .createdAtDateTime(room.getCreatedAt())
+                .isCreator(creator != null && creator.getId().equals(name))
+                .recentMessageCount(recentMessageCount)
+                .build();
     }
 
     private record RoomOperation(Room room, RoomResponse response) {
