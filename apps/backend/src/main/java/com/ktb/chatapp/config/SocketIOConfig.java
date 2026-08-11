@@ -43,10 +43,10 @@ public class SocketIOConfig {
     @Value("${socketio.server.origin:*}")
     private String origin;
 
-    @Value("${socketio.server.boss-threads:0}")
+    @Value("${socketio.server.boss-threads:1}")
     private int bossThreads;
 
-    @Value("${socketio.server.worker-threads:0}")
+    @Value("${socketio.server.worker-threads:32}")
     private int workerThreads;
 
     @Bean(destroyMethod = "shutdown")

@@ -15,13 +15,25 @@ class SocketIOThreadConfigurationTest {
             .withPropertyValues(
                     "socketio.server.host=localhost",
                     "socketio.server.port=5002",
-                    "socketio.server.origin=*",
-                    "socketio.server.boss-threads=1",
-                    "socketio.server.worker-threads=32");
+                    "socketio.server.origin=*");
 
     @Test
     void socketServerUsesConfiguredNettyThreadCounts() {
-        contextRunner.run(context -> {
+        assertThreadCounts(
+                contextRunner.withPropertyValues(
+                        "socketio.server.boss-threads=1",
+                        "socketio.server.worker-threads=32"),
+                1,
+                32);
+    }
+
+    @Test
+    void socketServerUsesDocumentedDefaultsWhenThreadPropertiesAreAbsent() {
+        assertThreadCounts(contextRunner, 1, 32);
+    }
+
+    private void assertThreadCounts(ApplicationContextRunner runner, int expectedBossThreads, int expectedWorkerThreads) {
+        runner.run(context -> {
             SocketIOConfig config = context.getAutowireCapableBeanFactory().createBean(SocketIOConfig.class);
 
             var meterRegistry = new SimpleMeterRegistry();
@@ -32,8 +44,8 @@ class SocketIOThreadConfigurationTest {
                         new MemoryStoreFactory());
 
                 assertAll(
-                        () -> assertEquals(1, server.getConfiguration().getBossThreads()),
-                        () -> assertEquals(32, server.getConfiguration().getWorkerThreads()));
+                        () -> assertEquals(expectedBossThreads, server.getConfiguration().getBossThreads()),
+                        () -> assertEquals(expectedWorkerThreads, server.getConfiguration().getWorkerThreads()));
             } finally {
                 meterRegistry.close();
             }
