@@ -13,7 +13,7 @@ vi.mock('@/services/axios', () => ({
 
 const roomsResponse = (rooms) => ({ data: { data: rooms } });
 
-const renderRoomList = () =>
+const renderRoomList = (overrides = {}) =>
   renderHook(() =>
     useRoomList({
       currentUser: { token: 'token-1' },
@@ -26,12 +26,32 @@ const renderRoomList = () =>
       setIsRetrying: vi.fn(),
       getRetryDelay: vi.fn(() => 1000),
       attemptConnection: vi.fn(() => Promise.resolve(true)),
+      ...overrides,
     })
   );
 
 describe('useRoomList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('uses the room-list request itself as the connection check', async () => {
+    const attemptConnection = vi.fn(() => Promise.resolve(true));
+    axiosInstance.get.mockResolvedValue(roomsResponse([]));
+
+    const { result } = renderRoomList({
+      connectionStatus: CONNECTION_STATUS.DISCONNECTED,
+      attemptConnection,
+    });
+
+    await act(async () => {
+      await result.current.fetchRooms();
+    });
+
+    expect(axiosInstance.get).toHaveBeenCalledWith('/api/rooms', {
+      params: { page: 0, pageSize: 10 },
+    });
+    expect(attemptConnection).not.toHaveBeenCalled();
   });
 
   it('replaces the list on refresh without leaving the refreshing flag on', async () => {

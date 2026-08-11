@@ -50,7 +50,6 @@ export const useRoomList = ({
   connectionStatus,
   setConnectionStatus,
   isRetrying,
-  attemptConnection,
   canJoinRooms = connectionStatus === CONNECTION_STATUS.CONNECTED,
 }) => {
   const [rooms, setRooms] = useState([]);
@@ -117,10 +116,6 @@ export const useRoomList = ({
   }, [isRetrying, setConnectionStatus]);
 
   const loadRooms = useCallback(async (page = 0, { append = false } = {}) => {
-    if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
-      await attemptConnection();
-    }
-
     const response = await axiosInstance.get('/api/rooms', {
       params: {
         page,
@@ -152,7 +147,7 @@ export const useRoomList = ({
     metadataRef.current = nextMetadata;
     setMetadataState(nextMetadata);
     setConnectionStatus(CONNECTION_STATUS.CONNECTED);
-  }, [attemptConnection, connectionStatus, setConnectionStatus]);
+  }, [setConnectionStatus]);
 
   const fetchRooms = useCallback(async () => {
     if (!currentUser?.token || isLoadingRef.current) {

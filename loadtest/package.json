@@ -7,12 +7,16 @@
   "scripts": {
     "test": "jest",
     "test:load": "node load-test.js",
+    "test:smoke": "node load-test.js --users=1 --batch-size=1 --batch-delay=0 --messages=1",
+    "test:100": "pnpm run test:smoke && node load-test.js --users=100 --batch-size=10 --batch-delay=1000 --messages=20",
     "test:light": "node load-test.js --users=50 --batch-size=10 --batch-delay=1000",
-    "test:medium": "node load-test.js --users=200 --batch-size=20 --batch-delay=700",
-    "test:heavy": "node load-test.js --users=1000 --batch-size=20 --batch-delay=700",
+    "test:medium": "pnpm run test:smoke && node load-test.js --users=200 --batch-size=20 --batch-delay=700",
+    "test:heavy": "pnpm run test:smoke && node load-test.js --users=1000 --batch-size=20 --batch-delay=700",
     "test:rampup": "node ramp-up-test.js",
     "test:rampup:small": "node ramp-up-test.js --max-users=200 --sustain-duration=120",
     "test:rampup:large": "node ramp-up-test.js --max-users=1000 --min-users-per-second=10 --max-users-per-second=20 --sustain-duration=300",
+    "test:upload:5mb": "node file-upload-api-load.js",
+    "test:upload:5mb:100": "pnpm run test:upload:5mb && node file-upload-api-load.js --users=100 --concurrency=10",
     "create-users": "node create-test-users.js"
   },
   "keywords": [

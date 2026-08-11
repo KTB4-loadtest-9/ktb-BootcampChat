@@ -52,7 +52,6 @@ export default function ChatRoomsView({ router }) {
     connectionStatus: httpConnectionStatus,
     setConnectionStatus: setHttpConnectionStatus,
     isRetrying,
-    attemptConnection,
   } = useServerConnection();
   const [socketConnectionStatus, setSocketConnectionStatus] = useState(
     CONNECTION_STATUS.CHECKING
@@ -83,7 +82,6 @@ export default function ChatRoomsView({ router }) {
     connectionStatus: httpConnectionStatus,
     setConnectionStatus: setHttpConnectionStatus,
     isRetrying,
-    attemptConnection,
     canJoinRooms,
   });
 
