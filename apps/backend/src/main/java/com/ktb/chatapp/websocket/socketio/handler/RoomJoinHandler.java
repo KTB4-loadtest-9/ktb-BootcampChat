@@ -17,6 +17,7 @@ import com.ktb.chatapp.websocket.socketio.SocketUser;
 import com.ktb.chatapp.websocket.socketio.UserRooms;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -103,11 +104,8 @@ public class RoomJoinHandler {
             }
 
             // 참가자 정보 조회
-            List<UserResponse> participants = roomOpt.get().getParticipantIds()
+            List<UserResponse> participants = userRepository.findAllById(roomOpt.get().getParticipantIds())
                     .stream()
-                    .map(userRepository::findById)
-                    .filter(Optional::isPresent)
-                    .map(Optional::get)
                     .map(UserResponse::from)
                     .toList();
             
@@ -138,6 +136,39 @@ public class RoomJoinHandler {
                 "message", e.getMessage() != null ? e.getMessage() : "채팅방 입장에 실패했습니다."
             ));
         }
+    }
+
+    /**
+     * 연결 복구 시 기존 방을 한 번에 검증한 뒤 소켓만 재입장시킨다.
+     * 방별 일반 입장 핸들러를 호출하면 사용자·방 조회가 방 수만큼 반복된다.
+     */
+    public void handleReconnectRooms(SocketIOClient client, Set<String> roomIds) {
+        if (roomIds == null || roomIds.isEmpty()) {
+            return;
+        }
+
+        String userId = getUserId(client);
+        if (userId == null) {
+            client.sendEvent(JOIN_ROOM_ERROR, Map.of("message", "Unauthorized"));
+            return;
+        }
+        if (userRepository.findById(userId).isEmpty()) {
+            client.sendEvent(JOIN_ROOM_ERROR, Map.of("message", "User not found"));
+            return;
+        }
+
+        Set<String> existingRoomIds = roomRepository.findAllById(roomIds).stream()
+                .map(Room::getId)
+                .collect(Collectors.toSet());
+
+        roomIds.forEach(roomId -> {
+            if (!existingRoomIds.contains(roomId)) {
+                client.sendEvent(JOIN_ROOM_ERROR, Map.of("message", "채팅방을 찾을 수 없습니다."));
+                return;
+            }
+            client.joinRoom(roomId);
+            client.sendEvent(JOIN_ROOM_SUCCESS, Map.of("roomId", roomId));
+        });
     }
     
     private SocketUser getUser(SocketIOClient client) {

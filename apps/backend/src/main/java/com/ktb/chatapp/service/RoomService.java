@@ -152,6 +152,15 @@ public class RoomService {
 
     @CacheEvict(cacheNames = "rooms", allEntries = true)
     public Room createRoom(CreateRoomRequest createRoomRequest, String name) {
+        return createRoomOperation(createRoomRequest, name).room();
+    }
+
+    @CacheEvict(cacheNames = "rooms", allEntries = true)
+    public RoomResponse createRoomResponse(CreateRoomRequest createRoomRequest, String name) {
+        return createRoomOperation(createRoomRequest, name).response();
+    }
+
+    private RoomOperation createRoomOperation(CreateRoomRequest createRoomRequest, String name) {
         User creator = userRepository.findByEmail(name)
             .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다: " + name));
 
@@ -166,16 +175,16 @@ public class RoomService {
         }
 
         Room savedRoom = roomRepository.save(room);
-        
+
+        RoomResponse roomResponse = mapToRoomResponse(savedRoom, name);
         // Publish event for room created
         try {
-            RoomResponse roomResponse = mapToRoomResponse(savedRoom, name);
             eventPublisher.publishEvent(new RoomCreatedEvent(this, roomResponse));
         } catch (Exception e) {
             log.error("roomCreated 이벤트 발행 실패", e);
         }
-        
-        return savedRoom;
+
+        return new RoomOperation(savedRoom, roomResponse);
     }
 
     public Optional<Room> findRoomById(String roomId) {
@@ -184,6 +193,17 @@ public class RoomService {
 
     @CacheEvict(cacheNames = "rooms", allEntries = true)
     public Room joinRoom(String roomId, String password, String name) {
+        RoomOperation operation = joinRoomOperation(roomId, password, name);
+        return operation == null ? null : operation.room();
+    }
+
+    @CacheEvict(cacheNames = "rooms", allEntries = true)
+    public RoomResponse joinRoomResponse(String roomId, String password, String name) {
+        RoomOperation operation = joinRoomOperation(roomId, password, name);
+        return operation == null ? null : operation.response();
+    }
+
+    private RoomOperation joinRoomOperation(String roomId, String password, String name) {
         Optional<Room> roomOpt = roomRepository.findById(roomId);
         if (roomOpt.isEmpty()) {
             return null;
@@ -207,15 +227,16 @@ public class RoomService {
             room = roomRepository.save(room);
         }
         
+        RoomResponse roomResponse = mapToRoomResponse(room, name);
+
         // Publish event for room updated
         try {
-            RoomResponse roomResponse = mapToRoomResponse(room, name);
             eventPublisher.publishEvent(new RoomUpdatedEvent(this, roomId, roomResponse));
         } catch (Exception e) {
             log.error("roomUpdate 이벤트 발행 실패", e);
         }
 
-        return room;
+        return new RoomOperation(room, roomResponse);
     }
 
     private RoomResponse mapToRoomResponse(Room room, String name) {
@@ -265,6 +286,9 @@ public class RoomService {
             .isCreator(creator != null && creator.getId().equals(name))
             .recentMessageCount(recentMessageCount)
             .build();
+    }
+
+    private record RoomOperation(Room room, RoomResponse response) {
     }
 
     private Map<String, User> findUsersById(Collection<Room> rooms) {
