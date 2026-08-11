@@ -166,6 +166,6 @@ public class ConnectionLoginHandler {
                 Thread.currentThread().interrupt();
                 log.error("Error in duplicate login notification thread", e);
             }
-        }).start();
+        });
     }
 }
