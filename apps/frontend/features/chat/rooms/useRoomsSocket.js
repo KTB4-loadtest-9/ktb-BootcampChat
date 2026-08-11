@@ -36,6 +36,8 @@ export const useRoomsSocket = ({
     if (!currentUser?.token) return;
 
     let isSubscribed = true;
+    let subscribedSocket = null;
+    let subscribedHandlers = null;
 
     const connectSocket = async () => {
       setConnectionStatus(CONNECTION_STATUS.CONNECTING);
@@ -149,6 +151,8 @@ export const useRoomsSocket = ({
         Object.entries(handlers).forEach(([event, handler]) => {
           socket.on(event, handler);
         });
+        subscribedSocket = socket;
+        subscribedHandlers = handlers;
 
         // connect()는 연결 완료 후 resolve되므로 최초 connect 이벤트는 이미 지나갔다.
         if (socket.connected) {
@@ -172,10 +176,18 @@ export const useRoomsSocket = ({
 
     return () => {
       isSubscribed = false;
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
+
+      if (subscribedSocket && subscribedHandlers) {
+        Object.entries(subscribedHandlers).forEach(([event, handler]) => {
+          subscribedSocket.off?.(event, handler);
+        });
       }
+
+      // socketClient 는 인증 세션당 하나의 연결을 공유한다. 목록에서 방으로
+      // 이동할 때 여기서 연결까지 끊으면 새 방 화면의 setupSocket 과 경합한다.
+      // 이 훅은 자신이 등록한 목록 이벤트만 정리하고, 연결 종료는 로그아웃이나
+      // 채팅방 소켓 소유자가 담당한다.
+      socketRef.current = null;
     };
   }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 

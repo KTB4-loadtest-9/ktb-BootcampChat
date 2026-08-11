@@ -157,6 +157,7 @@ export const useRoomHandling = ({
         reconnectionDelay: 1000,
         reconnectionDelayMax: 3000,
         timeout: 10000,
+        connectionTimeoutMs: 15000,
         pingTimeout: 10000,
         pingInterval: 8000,
         forceNew: true,
@@ -316,7 +317,12 @@ export const useRoomHandling = ({
         initializingRef.current = true;
         setupStarted();
         // 1. Socket Setup
-        attachSocket(await setupSocket());
+        const socket = await setupSocket();
+        attachSocket(socket);
+
+        if (!socket?.connected) {
+          throw new Error('Socket not connected');
+        }
 
         // 2. Fetch Room Data
         const roomData = await fetchRoomData(roomId);
@@ -346,10 +352,12 @@ export const useRoomHandling = ({
         }
 
         // 4. Join Room and Load Messages
-        if (mountedRef.current && socketRef.current?.connected) {
-          await joinRoom(roomId);
-          await loadInitialMessages(roomId);
+        if (!mountedRef.current) {
+          return;
         }
+
+        await joinRoom(roomId);
+        await loadInitialMessages(roomId);
 
         if (mountedRef.current) {
           setupCompleteRef.current = true;
@@ -402,7 +410,10 @@ export const useRoomHandling = ({
 
   useEffect(() => {
     return () => {
-      setupPromiseRef.current = null;
+      // React Strict Mode는 개발 모드에서 effect를 setup → cleanup → setup
+      // 순서로 재실행한다. 진행 중인 Promise를 여기서 비우면 두 번째
+      // setup이 같은 방 초기화를 중복 실행한다. Promise의 finally가
+      // 자신의 완료 시점에 ref를 정리하도록 둔다.
       initializingRef.current = false;
       setupCompleteRef.current = false;
 
