@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.ktb.chatapp.cache.MessagePageCache;
 import com.corundumstudio.socketio.BroadcastOperations;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
@@ -51,6 +52,7 @@ class RoomJoinHandlerTest {
     @Mock private RoomLeaveHandler roomLeaveHandler;
     @Mock private SocketIOClient client;
     @Mock private BroadcastOperations roomOperations;
+    @Mock private MessagePageCache messagePageCache;
 
     private RoomJoinHandler handler;
 
@@ -64,7 +66,8 @@ class RoomJoinHandlerTest {
                 userRooms,
                 messageLoader,
                 messageResponseMapper,
-                roomLeaveHandler);
+                roomLeaveHandler,
+                messagePageCache);
     }
 
     @Test
@@ -108,6 +111,7 @@ class RoomJoinHandlerTest {
         verify(roomRepository).addParticipant("room-1", "user-1");
         verify(client).joinRoom("room-1");
         verify(userRooms).add("user-1", "room-1");
+        verify(messagePageCache).invalidateRoom("room-1");
         ArgumentCaptor<JoinRoomSuccessResponse> responseCaptor =
                 ArgumentCaptor.forClass(JoinRoomSuccessResponse.class);
         verify(client).sendEvent(eq(JOIN_ROOM_SUCCESS), responseCaptor.capture());

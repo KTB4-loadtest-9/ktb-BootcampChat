@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.ktb.chatapp.cache.MessagePageCache;
 import com.corundumstudio.socketio.BroadcastOperations;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
@@ -47,6 +48,7 @@ class RoomLeaveHandlerTest {
     @Mock private MessageResponseMapper messageResponseMapper;
     @Mock private SocketIOClient client;
     @Mock private BroadcastOperations roomOperations;
+    @Mock private MessagePageCache messagePageCache;
 
     private RoomLeaveHandler handler;
 
@@ -58,7 +60,8 @@ class RoomLeaveHandlerTest {
                 roomRepository,
                 userRepository,
                 userRooms,
-                messageResponseMapper);
+                messageResponseMapper,
+                messagePageCache);
     }
 
     @Test
@@ -115,6 +118,7 @@ class RoomLeaveHandlerTest {
         verify(roomRepository).removeParticipant("room-1", "user-1");
         verify(client).leaveRoom("room-1");
         verify(userRooms).remove("user-1", "room-1");
+        verify(messagePageCache).invalidateRoom("room-1");
         verify(roomOperations).sendEvent(MESSAGE, leaveMessageResponse);
         ArgumentCaptor<Object> participantsCaptor = ArgumentCaptor.forClass(Object.class);
         verify(roomOperations).sendEvent(eq(PARTICIPANTS_UPDATE), participantsCaptor.capture());
@@ -170,5 +174,6 @@ class RoomLeaveHandlerTest {
         verify(client).leaveRoom("room-1");
         verify(client).leaveRoom("room-2");
         verify(roomOperations, org.mockito.Mockito.times(2)).sendEvent(eq(PARTICIPANTS_UPDATE), any());
+        verify(messagePageCache, org.mockito.Mockito.times(2)).invalidateRoom(any());
     }
 }

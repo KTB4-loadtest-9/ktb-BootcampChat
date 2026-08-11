@@ -72,6 +72,7 @@ pnpm run test:rampup  # 500명, ~100개 방까지 점진적 증가, 60초 유지
 - ✅ 점진적 부하 증가 (Ramp-up)
 - ✅ 실시간 메트릭 대시보드 (고정 화면, 스크롤 없음)
 - ✅ 메시지 읽음 처리 자동화 (message → markMessagesAsRead → messagesRead)
+- ✅ 초기 메시지 이력 반복 조회를 통한 Redis 페이지 캐시 검증 (`--history-refetches`)
 - ✅ 메시지 전송 지연시간 측정 (Avg, P95, P99)
 - ✅ 연결 성공률 및 에러 추적
 - ✅ 최근 활동 로그 표시 (최근 10개 항목)
@@ -142,6 +143,9 @@ node load-test.js \
   --api-url=http://localhost:5001 \
   --socket-url=http://localhost:5002 \
   --room-id=your-room-id
+
+# 동일 초기 이력 페이지를 5회 추가 조회한 뒤 메시지 전송
+node load-test.js --users=20 --messages=5 --history-refetches=5
 ```
 
 ## 커맨드라인 옵션
@@ -154,6 +158,7 @@ node load-test.js \
 | `--batch-size` | `-b` | 배치당 동시 접속 유저 수 | 10 |
 | `--batch-delay` | - | 배치 간 대기 시간 (밀리초) | 1000 |
 | `--messages` | `-m` | 유저당 메시지 수 | 20 |
+| `--history-refetches` | - | 메시지 전송 전에 초기 이력 페이지를 추가로 반복 조회하는 횟수 | 0 |
 | `--api-url` | - | REST API URL | http://localhost:5001 |
 | `--socket-url` | - | Socket.IO URL | http://localhost:5002 |
 | `--room-id` | - | 채팅방 ID (없으면 자동 생성) | null |
@@ -174,6 +179,21 @@ node load-test.js \
 - **Messages Marked Read**: 읽음 처리 요청을 보낸 메시지 수
 - **Read Acks Received**: 서버로부터 받은 읽음 확인 응답 수
 - **Messages/sec**: 초당 메시지 전송률
+- **Prev Msgs Fetched**: 이전 메시지 페이지 조회 횟수. `--history-refetches=N`이면 사용자별로 기본 1회 + N회 조회합니다.
+
+### Redis 메시지 페이지 캐시 검증
+
+`--history-refetches`의 기본값은 `0`이며 기존 부하 시나리오와 동일하게 동작합니다. 값을 지정하면 각 사용자가 방 입장 직후 같은 초기 페이지를 N회 추가 조회한 뒤 메시지를 전송합니다.
+
+```bash
+node load-test.js \
+  --users=50 \
+  --messages=5 \
+  --history-refetches=10 \
+  --room-id=your-room-id
+```
+
+이 실행에서 `Prev Msgs Fetched`는 사용자 수 × (1 + N)에 가까워야 합니다. 백엔드 Prometheus 지표의 `chat_message_cache_requests_total`에서 `result="hit"` 증가와 MongoDB 메시지 조회량 감소를 함께 확인하세요. 새 메시지·리액션 이후에는 방 버전 무효화로 다음 조회가 다시 `miss`가 됩니다.
 
 ### 성능 메트릭
 - **Avg Message Latency**: 평균 메시지 전송 지연시간

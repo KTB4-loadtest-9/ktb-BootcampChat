@@ -1,5 +1,6 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
+import com.ktb.chatapp.cache.MessagePageCache;
 import com.ktb.chatapp.config.MongoTestContainer;
 import com.ktb.chatapp.config.RedisTestContainer;
 import com.ktb.chatapp.dto.FetchMessagesRequest;
@@ -31,6 +32,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
 
 @SpringBootTest
 @Import({MongoTestContainer.class, RedisTestContainer.class})
@@ -40,7 +44,7 @@ import static org.mockito.Mockito.doNothing;
 })
 class MessageLoaderIntegrationTest {
 
-    @Autowired
+    @MockitoSpyBean
     private MessageRepository messageRepository;
 
     @Autowired
@@ -51,6 +55,9 @@ class MessageLoaderIntegrationTest {
 
     @Autowired
     private FileRepository fileRepository;
+
+    @Autowired
+    private MessagePageCache messagePageCache;
 
     @MockitoSpyBean
     private MessageReadStatusService messageReadStatusService;
@@ -73,7 +80,8 @@ class MessageLoaderIntegrationTest {
                 messageRepository,
                 userRepository,
                 new MessageResponseMapper(fileRepository),
-                messageReadStatusService
+                messageReadStatusService,
+                messagePageCache
         );
 
         // 테스트 사용자 생성 및 저장
@@ -184,6 +192,28 @@ class MessageLoaderIntegrationTest {
         // Then: 빈 결과 반환
         assertThat(response.getMessages()).isEmpty();
         assertThat(response.isHasMore()).isFalse();
+    }
+
+    @Test
+    @DisplayName("동일 페이지는 MongoDB를 한 번만 조회하고 방 버전 증가 후 다시 조회한다")
+    void repeatedPageUsesCacheUntilRoomInvalidation() {
+        IntStream.range(0, 3)
+                .forEach(this::createAndSaveMessage);
+
+        FetchMessagesRequest request = new FetchMessagesRequest(roomId, 30, null);
+
+        FetchMessagesResponse first = messageLoader.loadMessages(request, userId);
+        FetchMessagesResponse cached = messageLoader.loadMessages(request, userId);
+
+        assertThat(cached).isEqualTo(first);
+        verify(messageRepository, times(1)).findByRoomIdAndTimestampBefore(
+                anyString(), any(LocalDateTime.class), any());
+
+        messagePageCache.invalidateRoom(roomId);
+        messageLoader.loadMessages(request, userId);
+
+        verify(messageRepository, times(2)).findByRoomIdAndTimestampBefore(
+                anyString(), any(LocalDateTime.class), any());
     }
 
     @Test
