@@ -426,7 +426,6 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/ktb-chat-backend
 Environment="SPRING_PROFILE=prod"
-Environment="JVM_OPTS=-Xms1280m -Xmx1280m -XX:+UseG1GC"
 Environment="HOSTNAME=%H"
 ExecStart=/usr/bin/java -Xms1280m -Xmx1280m -XX:+UseG1GC -Dspring.profiles.active=prod -jar target/ktb-chat-backend-0.0.1-SNAPSHOT.jar
 Restart=on-failure
