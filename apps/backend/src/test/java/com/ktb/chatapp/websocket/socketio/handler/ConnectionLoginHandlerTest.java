@@ -2,10 +2,13 @@ package com.ktb.chatapp.websocket.socketio.handler;
 
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
+import com.corundumstudio.socketio.HandshakeData;
 import com.ktb.chatapp.websocket.socketio.ConnectedUsers;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import com.ktb.chatapp.websocket.socketio.UserRooms;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.net.InetSocketAddress;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +29,9 @@ class ConnectionLoginHandlerTest {
     @Mock private RoomJoinHandler roomJoinHandler;
     @Mock private RoomLeaveHandler roomLeaveHandler;
     @Mock private SocketIOClient client;
+    @Mock private SocketIOClient existingClient;
+    @Mock private HandshakeData handshakeData;
+    @Mock private HttpHeaders httpHeaders;
 
     private ConnectionLoginHandler handler;
 
@@ -51,6 +57,28 @@ class ConnectionLoginHandlerTest {
 
         verify(client).set("user", user);
         verify(roomJoinHandler).handleReconnectRooms(client, Set.of("room-1", "room-2"));
+        verify(connectedUsers).set(user.id(), user);
+        verify(client).joinRooms(Set.of("user:" + user.id(), "room-list"));
+    }
+
+    @Test
+    void onConnect_withExistingConnection_completesInitialization() {
+        String existingSocketId = UUID.randomUUID().toString();
+        SocketUser user = new SocketUser("user-1", "tester", "session-1", "socket-1");
+        SocketUser existingUser = new SocketUser(user.id(), "tester", "session-0", existingSocketId);
+        when(connectedUsers.get(user.id())).thenReturn(existingUser);
+        when(socketIOServer.getClient(UUID.fromString(existingSocketId))).thenReturn(existingClient);
+        when(client.getHandshakeData()).thenReturn(handshakeData);
+        when(handshakeData.getHttpHeaders()).thenReturn(httpHeaders);
+        when(httpHeaders.get("User-Agent")).thenReturn("test-agent");
+        when(client.getRemoteAddress()).thenReturn(new InetSocketAddress("127.0.0.1", 8080));
+        when(client.get("user")).thenReturn(user);
+        when(userRooms.get(user.id())).thenReturn(Set.of("room-1"));
+
+        handler.onConnect(client, user);
+
+        verify(client).set("user", user);
+        verify(roomJoinHandler).handleReconnectRooms(client, Set.of("room-1"));
         verify(connectedUsers).set(user.id(), user);
         verify(client).joinRooms(Set.of("user:" + user.id(), "room-list"));
     }
