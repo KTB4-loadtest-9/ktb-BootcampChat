@@ -31,3 +31,17 @@ scrape_configs:
       - targets: ['redis-exporter:9121']
         labels:
           environment: 'dev'
+
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          environment: 'dev'
+    metric_relabel_configs:
+      # Extract container name from container_label_com_docker_compose_service
+      - source_labels: [container_label_com_docker_compose_service]
+        target_label: container_name
+      # Extract container name from id (fallback)
+      - source_labels: [id]
+        regex: '/docker/([a-f0-9]+)'
+        target_label: container_id
