@@ -125,7 +125,7 @@ async function forbiddenWordScenario(page, vuContext) {
 
         // 2. 금칙어 메시지 전송 시도
         const forbiddenWord = FORBIDDEN_WORDS[Math.floor(Math.random() * FORBIDDEN_WORDS.length)];
-        await sendMessageAction(page, forbiddenWord);
+        await sendMessageAction(page, forbiddenWord, { expectFailure: true });
 
         // 3. 에러 토스트 확인
         const errorToast = page.getByTestId('toast-error');

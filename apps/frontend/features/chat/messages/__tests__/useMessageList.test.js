@@ -75,4 +75,20 @@ describe('mergeUniqueSortedMessages', () => {
     expect(second.processedMessageIds).toEqual(first.processedMessageIds);
     expect(processedIds).toEqual(new Set(['existing']));
   });
+
+  it('keeps the current array reference when a page has no unseen messages', () => {
+    const currentMessages = [
+      { _id: 'existing', timestamp: '2026-01-01T00:00:01Z' },
+    ];
+    const processedIds = new Set(['existing']);
+
+    const result = deriveUniqueSortedMessages(
+      currentMessages,
+      [{ _id: 'existing', timestamp: '2026-01-01T00:00:01Z' }],
+      processedIds
+    );
+
+    expect(result.messages).toBe(currentMessages);
+    expect(result.processedMessageIds).toBe(processedIds);
+  });
 });

@@ -5,6 +5,7 @@ import FileMessage from './FileMessage';
 import UserMessage from './UserMessage';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { useAutoScroll } from '../hooks/useAutoScroll';
+import { mergeSortedMessages } from '../features/chat/messages/useMessageList';
 
 const LoadingIndicator = React.memo(() => (
   <div className="loading-messages">
@@ -63,14 +64,9 @@ const ChatMessages = ({
     );
   }, [currentUser?.id]);
 
-  const allMessages = useMemo(() => {
-    if (!Array.isArray(messages)) return [];
-
-    return [...messages].sort((a, b) => {
-      if (!a?.timestamp || !b?.timestamp) return 0;
-      return new Date(a.timestamp) - new Date(b.timestamp);
-    });
-  }, [messages]);
+  const allMessages = useMemo(() => (
+    mergeSortedMessages([], Array.isArray(messages) ? messages : [])
+  ), [messages]);
 
   const renderMessage = useCallback((msg, idx) => {
     if (!msg) return null;

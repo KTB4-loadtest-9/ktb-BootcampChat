@@ -282,62 +282,82 @@ export default function ChatRoomsView({ router }) {
               </HStack>
             </Callout.Root>
           )}
-        {httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
-          <ConnectionErrorBanner message="채팅 서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요." />
-        ) : loading ? (
-          <Box $css={{ padding: '$400' }}>
-            <LoadingIndicator text="채팅방 목록을 불러오는 중..." />
-          </Box>
-        ) : rooms.length > 0 ? (
-          <VStack $css={{ gap: '$250', width: '100%' }}>
-            <RoomsTable
-              rooms={rooms}
-              canJoinRooms={canJoinRooms}
-              joiningRoomId={joiningRoomId}
-              joinError={joinError}
-              onClearJoinError={clearJoinError}
-              onJoinRoom={handleJoinRoom}
-            />
+        <Box
+          data-testid="rooms-content-slot"
+          $css={{ minHeight: '430px', width: '100%' }}
+        >
+          {httpConnectionStatus === CONNECTION_STATUS.ERROR ? (
+            <ConnectionErrorBanner message="채팅 서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요." />
+          ) : loading ? (
+            <Box
+              $css={{
+                minHeight: '430px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <LoadingIndicator text="채팅방 목록을 불러오는 중..." />
+            </Box>
+          ) : rooms.length > 0 ? (
+            <VStack $css={{ gap: '$250', width: '100%' }}>
+              <RoomsTable
+                rooms={rooms}
+                canJoinRooms={canJoinRooms}
+                joiningRoomId={joiningRoomId}
+                joinError={joinError}
+                onClearJoinError={clearJoinError}
+                onJoinRoom={handleJoinRoom}
+              />
 
-            {metadata?.hasMore && (
-              <HStack
+              {metadata?.hasMore && (
+                <HStack
+                  $css={{
+                    gap: '$200',
+                    width: '100%',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  aria-label="채팅방 추가 로드"
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={loadMoreRooms}
+                    disabled={loadingMore || refreshing}
+                    data-testid="load-more-rooms-button"
+                  >
+                    {loadingMore ? '불러오는 중...' : '채팅방 더 보기'}
+                  </Button>
+                </HStack>
+              )}
+            </VStack>
+          ) : (
+            !error && (
+              <VStack
                 $css={{
-                  gap: '$200',
-                  width: '100%',
+                  gap: '$300',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  minHeight: '430px',
+                  padding: '$400',
                 }}
-                aria-label="채팅방 추가 로드"
+                data-testid="rooms-empty"
               >
+                <Text typography="body1">생성된 채팅방이 없습니다.</Text>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={loadMoreRooms}
-                  disabled={loadingMore || refreshing}
-                  data-testid="load-more-rooms-button"
+                  colorPalette="primary"
+                  onClick={() => router.push('/chat/new')}
+                  disabled={
+                    httpConnectionStatus !== CONNECTION_STATUS.CONNECTED
+                  }
                 >
-                  {loadingMore ? '불러오는 중...' : '채팅방 더 보기'}
+                  새 채팅방 만들기
                 </Button>
-              </HStack>
-            )}
-          </VStack>
-        ) : (
-          !error && (
-            <VStack
-              $css={{ gap: '$300', alignItems: 'center', padding: '$400' }}
-              data-testid="rooms-empty"
-            >
-              <Text typography="body1">생성된 채팅방이 없습니다.</Text>
-              <Button
-                colorPalette="primary"
-                onClick={() => router.push('/chat/new')}
-                disabled={httpConnectionStatus !== CONNECTION_STATUS.CONNECTED}
-              >
-                새 채팅방 만들기
-              </Button>
-            </VStack>
-          )
-        )}
+              </VStack>
+            )
+          )}
+        </Box>
       </VStack>
     </Box>
   );

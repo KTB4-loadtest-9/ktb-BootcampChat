@@ -44,11 +44,8 @@ export const useMessageHandling = (
       return;
     }
 
-    // 가장 오래된 메시지의 타임스탬프 찾기
-    const sortedMessages = [...messages].sort(
-      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-    );
-    const oldestMessage = sortedMessages[0];
+    // 메시지 병합 단계가 시간순을 보장하므로 첫 항목이 가장 오래된 메시지다.
+    const oldestMessage = messages[0];
     const beforeTimestamp = oldestMessage?.timestamp;
 
     if (!beforeTimestamp) {
@@ -69,12 +66,12 @@ export const useMessageHandling = (
    const roomSocket = getRoomSocket();
    if (!canSendOnRoomSocket() || !currentUser) {
      Toast.error('채팅 서버와 연결이 끊어졌습니다.');
-     return;
+     throw new Error('채팅 서버와 연결이 끊어졌습니다.');
    }
 
    if (!roomId) {
      Toast.error('채팅방 정보를 찾을 수 없습니다.');
-     return;
+     throw new Error('채팅방 정보를 찾을 수 없습니다.');
    }
 
    try {
@@ -112,7 +109,7 @@ export const useMessageHandling = (
          error.message?.includes('인증') ||
          error.message?.includes('토큰')) {
        await handleSessionError();
-       return;
+       throw error;
      }
 
      // 서버가 거부한 메시지는 onError 핸들러가 이미 토스트로 알렸다.
@@ -124,6 +121,7 @@ export const useMessageHandling = (
        setUploadError(error.message);
        setUploading(false);
      }
+     throw error;
    }
  }, [currentUser, roomId, handleSessionError, uploadChatFile, resetFileUpload, setUploadError, setUploading, canSendOnRoomSocket, getRoomSocket]);
 

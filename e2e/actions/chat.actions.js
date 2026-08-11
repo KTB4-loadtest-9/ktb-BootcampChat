@@ -1,3 +1,4 @@
+const { expect } = require('@playwright/test');
 const { bannedWordSafeToken } = require('../utils/bannedWordSafeText');
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
@@ -53,10 +54,17 @@ async function createChatRoomAction(page, roomName) {
  * 메시지 전송 액션
  * @param {import('@playwright/test').Page} page
  * @param {string} message - 전송할 메시지 내용
+ * @param {{ expectFailure?: boolean }} options
  */
-async function sendMessageAction(page, message) {
+async function sendMessageAction(page, message, { expectFailure = false } = {}) {
+  const submissionStatus = page.getByTestId('message-submission-status');
+
   await page.getByTestId('chat-message-input').fill(message);
+  await expect(submissionStatus).toHaveText('idle');
   await page.getByTestId('chat-send-button').click();
+  await expect(submissionStatus).toHaveText(expectFailure ? 'failed' : 'complete', {
+    timeout: 15000,
+  });
 }
 
 /**

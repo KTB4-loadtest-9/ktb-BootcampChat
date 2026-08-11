@@ -82,4 +82,21 @@ describe('MessageActions', () => {
       value: originalClipboard,
     });
   });
+
+  it('opens the reaction picker and adds the selected reaction', async () => {
+    const onReactionAdd = vi.fn();
+    render(
+      <MessageActions
+        messageId="message-1"
+        currentUserId="user-1"
+        reactions={{}}
+        onReactionAdd={onReactionAdd}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText('리액션 추가'));
+    fireEvent.click(await screen.findByRole('button', { name: '👍' }));
+
+    expect(onReactionAdd).toHaveBeenCalledWith('message-1', '👍');
+  });
 });

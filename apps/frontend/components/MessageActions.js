@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useCallback, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { LikeIcon, CopyIcon } from '@vapor-ui/icons';
 import { Button, IconButton, VStack, HStack, Box } from '@vapor-ui/core';
-import EmojiPicker from './EmojiPicker';
 import { Toast } from './Toast';
+
+const EmojiPicker = lazy(() => import('./EmojiPicker'));
 
 const FALLBACK_COPY_ELEMENT_ID = 'message-copy-fallback';
 
@@ -299,12 +300,14 @@ const MessageActions = ({
               data-testid="emoji-picker-container"
             >
               <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-                <EmojiPicker
-                  onSelect={handleReactionSelect}
-                  emojiSize={20}
-                  perLine={8}
-                  theme="light"
-                />
+                <Suspense fallback={null}>
+                  <EmojiPicker
+                    onSelect={handleReactionSelect}
+                    emojiSize={20}
+                    perLine={8}
+                    theme="light"
+                  />
+                </Suspense>
               </div>
             </div>,
             document.body

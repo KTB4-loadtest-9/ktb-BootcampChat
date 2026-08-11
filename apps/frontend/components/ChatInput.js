@@ -46,6 +46,7 @@ const ChatInput = forwardRef(({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
+  const [submissionStatus, setSubmissionStatus] = useState('idle');
   const [isDragging, setIsDragging] = useState(false);
   const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
 
@@ -53,7 +54,10 @@ const ChatInput = forwardRef(({
     if (!file) return;
 
     try {
-      await fileService.validateFile(file);
+      const validationResult = await fileService.validateFile(file);
+      if (!validationResult.success) {
+        throw new Error(validationResult.message);
+      }
       
       const filePreview = {
         file,
@@ -65,6 +69,7 @@ const ChatInput = forwardRef(({
       
       setFiles(prev => [...prev, filePreview]);
       setUploadError(null);
+      setSubmissionStatus('idle');
       onFileSelect?.(file);
       
     } catch (error) {
@@ -75,13 +80,14 @@ const ChatInput = forwardRef(({
         fileInputRef.current.value = '';
       }
     }
-  }, [onFileSelect]);
+  }, [fileInputRef, onFileSelect]);
 
   const handleFileRemove = useCallback((fileToRemove) => {
     setFiles(prev => prev.filter(file => file.name !== fileToRemove.name));
     URL.revokeObjectURL(fileToRemove.url);
     setUploadError(null);
     setUploadProgress(0);
+    setSubmissionStatus('idle');
   }, []);
 
   const handleFileDrop = useCallback(async (e) => {
@@ -104,12 +110,15 @@ const ChatInput = forwardRef(({
 
     if (files.length > 0) {
       try {
+        setUploading(true);
+        setSubmissionStatus('submitting');
+        setUploadError(null);
         const file = files[0];
         if (!file || !file.file) {
           throw new Error('파일이 선택되지 않았습니다.');
         }
 
-        onSubmit({
+        await onSubmit({
           type: 'file',
           content: message.trim(),
           fileData: file
@@ -119,19 +128,29 @@ const ChatInput = forwardRef(({
         setShowEmojiPicker(false);
         setShowMentionList(false);
         setFiles([]);
+        setSubmissionStatus('complete');
 
       } catch (error) {
         console.error('File submit error:', error);
         setUploadError(error.message);
+        setSubmissionStatus('failed');
+      } finally {
+        setUploading(false);
       }
     } else if (message.trim()) {
-      onSubmit({
-        type: 'text',
-        content: message.trim()
-      });
-      setMessage('');
-      setShowEmojiPicker(false);
-      setShowMentionList(false);
+      try {
+        setSubmissionStatus('submitting');
+        await onSubmit({
+          type: 'text',
+          content: message.trim()
+        });
+        setMessage('');
+        setShowEmojiPicker(false);
+        setShowMentionList(false);
+        setSubmissionStatus('complete');
+      } catch (error) {
+        setSubmissionStatus('failed');
+      }
     }
   }, [files, message, onSubmit, setMessage, setShowEmojiPicker, setShowMentionList]);
 
@@ -255,6 +274,7 @@ const ChatInput = forwardRef(({
     const lastAtSymbol = textBeforeCursor.lastIndexOf('@');
 
     setMessage(value);
+    setSubmissionStatus('idle');
 
     if (lastAtSymbol !== -1) {
       const textAfterAt = textBeforeCursor.slice(lastAtSymbol + 1);
@@ -280,6 +300,10 @@ const ChatInput = forwardRef(({
   }, [insertMention, messageInputRef]);
 
   const handleKeyDown = useCallback((e) => {
+    if (e.nativeEvent?.isComposing || e.keyCode === 229) {
+      return;
+    }
+
     if (showMentionList) {
       const participants = getFilteredParticipants(room); // room 객체 전달
       const participantsCount = participants.length;
@@ -403,6 +427,9 @@ const ChatInput = forwardRef(({
         )}
 
         <VStack $css={{ gap: '$100', width: '100%' }}>
+          <span className="sr-only" aria-hidden="true" data-testid="message-submission-status">
+            {submissionStatus}
+          </span>
           <VStack className="relative" $css={{ gap: '$025' }}>
             <HStack $css={{ gap: '$200' }}>
                 <Textarea
@@ -507,4 +534,4 @@ const ChatInput = forwardRef(({
 
 ChatInput.displayName = 'ChatInput';
 
-export default ChatInput;
+export default React.memo(ChatInput);

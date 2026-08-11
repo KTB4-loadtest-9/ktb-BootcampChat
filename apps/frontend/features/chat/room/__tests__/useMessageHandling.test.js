@@ -66,9 +66,9 @@ describe('useMessageHandling', () => {
       useMessageHandling(currentUser, roomId, vi.fn())
     );
 
-    await act(async () => {
+    await expect(act(async () => {
       await result.current.handleMessageSubmit({ content: 'hello' });
-    });
+    })).rejects.toThrow('채팅 서버와 연결이 끊어졌습니다.');
 
     expect(socketClient.sendChatMessageAndWait).not.toHaveBeenCalled();
     expect(Toast.error).toHaveBeenCalledWith('채팅 서버와 연결이 끊어졌습니다.');
