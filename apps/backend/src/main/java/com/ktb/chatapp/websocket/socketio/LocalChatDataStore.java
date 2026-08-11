@@ -8,6 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Thread-safe storage for chat-related data without external dependencies.
  */
 public class LocalChatDataStore implements ChatDataStore {
+
+    private static final String ACTIVE_CONNECTION_KEY_PREFIX = "conn_users:userid:";
     
     private final ConcurrentHashMap<String, Object> storage = new ConcurrentHashMap<>();
     
@@ -34,9 +36,19 @@ public class LocalChatDataStore implements ChatDataStore {
     public void delete(String key) {
         storage.remove(key);
     }
+
+    @Override
+    public void withLock(String key, Runnable action) {
+        // ponytail: global lock is enough for the single-node fallback; Redisson uses per-user locks.
+        synchronized (this) {
+            action.run();
+        }
+    }
     
     @Override
     public int size() {
-        return storage.size();
+        return (int) storage.keySet().stream()
+                .filter(key -> key.startsWith(ACTIVE_CONNECTION_KEY_PREFIX))
+                .count();
     }
 }

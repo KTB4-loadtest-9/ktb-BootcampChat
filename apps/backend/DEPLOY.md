@@ -125,6 +125,12 @@ tail -f logs/app.log
    OPENAI_API_KEY=sk-...
    ```
 
+   **선택 환경 변수:**
+   ```bash
+   # 기본값 redisson; 단일 노드 로컬 실행만 필요하면 memory 사용 가능
+   SOCKETIO_STORE=redisson
+   ```
+
 3. **MongoDB 및 Redis 실행 확인**
    ```bash
    # MongoDB 상태 확인
@@ -133,6 +139,10 @@ tail -f logs/app.log
    # Redis 상태 확인
    systemctl status redis
    ```
+
+   여러 백엔드 인스턴스를 운영할 때는 모든 인스턴스가 같은 Redis를 사용해야 합니다.
+   `SOCKETIO_STORE`를 생략해도 기본값은 `redisson`입니다. Redis 장애 중 Pub/Sub 이벤트는
+   재생되지 않으므로 복구 후 클라이언트의 재연결과 room 재참여를 확인하세요.
 
 ### Docker 런타임
 

@@ -104,6 +104,7 @@ CloudFront Signed URL 전용 동작으로 구성하며 공개 이미지 경로�
 | `MONGO_URI` | ✅ | 없음 | MongoDB 연결 문자열              |
 | `REDIS_HOST` | ✅ | 없음 | Redis 호스트                    |
 | `REDIS_PORT` | ✅ | 없음 | Redis 포트                      |
+| `SOCKETIO_STORE` | ❌ | `redisson` | Socket.IO 저장소 (`redisson` 또는 단일 노드용 `memory`) |
 | `PORT` | ❌ | `5001` | HTTP API 포트 (`server.port`) |
 | `WS_PORT` | ❌ | `5002` | Socket.IO 서버 포트             |
 | `CORS_ALLOWED_ORIGINS` | ❌ | `*` | REST API CORS 허용 Origin 목록. 쉼표로 구분 |
@@ -205,6 +206,8 @@ Spring Boot DevTools가 활성화되어 있어 다음 변경사항을 자동으�
 docker compose up -d
 ```
 MongoDB와 Redis가 이미 실행 중이라면 이 단계를 건너뛸 수 있습니다.
+
+`SOCKETIO_STORE=redisson`은 `netty-socketio`의 내장 `RedissonStoreFactory`를 사용해 Socket.IO 세션·room 상태와 cross-node broadcast를 같은 Redis로 공유합니다. 모든 백엔드 노드는 같은 Redis를 바라봐야 하며, 단일 노드만 운영할 때는 `SOCKETIO_STORE=memory`로 되돌릴 수 있습니다. Redis Pub/Sub은 장애 중 발행된 이벤트를 재생하지 않으므로 복구 뒤 클라이언트가 재연결·room 재참여해야 합니다.
 
 ## 모니터링 UI 접속
 `docker compose up -d`(또는 `make dev`)로 종속 서비스를 구동하면 모니터링 스택도 함께 올라옵니다. 아래 UI에서 접속할 수 있습니다(dev 기준):
