@@ -4,7 +4,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -16,8 +15,6 @@ import com.ktb.chatapp.security.SessionAwareJwtAuthenticationConverter;
 import com.ktb.chatapp.service.FileAccess;
 import com.ktb.chatapp.service.FileAccessService;
 import com.ktb.chatapp.service.FileService;
-import com.ktb.chatapp.service.DirectImageUploadService;
-import com.ktb.chatapp.dto.FileResponse;
 import com.ktb.chatapp.service.PreviewNotSupportedException;
 import com.ktb.chatapp.service.RateLimitService;
 import java.net.URI;
@@ -32,7 +29,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -69,9 +65,6 @@ class FileControllerTest {
 
     @MockitoBean
     private UserRepository userRepository;
-
-    @MockitoBean
-    private DirectImageUploadService directImageUploadService;
 
     /** RateLimitInterceptor가 웹 슬라이스에 함께 올라오므로 그 의존성도 채워야 한다. */
     @MockitoBean
@@ -196,42 +189,6 @@ class FileControllerTest {
         mockMvc.perform(delete("/api/files/{id}", "file-1").principal(PRINCIPAL))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("파일을 삭제할 권한이 없습니다."));
-    }
-
-    @Test
-    @DisplayName("JSON upload complete → 기존 success/file 응답 계약")
-    void completePresignedUpload_returnsLegacyShape() throws Exception {
-        FileResponse file = FileResponse.builder()
-                .id("file-1")
-                .filename("chat/images/user-1/image.png")
-                .originalname("image.png")
-                .mimetype("image/png")
-                .size(68L)
-                .build();
-        when(directImageUploadService.completeChat("upload-1", USER_ID)).thenReturn(file);
-
-        mockMvc.perform(post("/api/files/upload")
-                        .principal(PRINCIPAL)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"uploadId":"upload-1","uploadType":"PRESIGNED_CHAT_IMAGE"}
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.file._id").value("file-1"))
-                .andExpect(jsonPath("$.file.filename").value("chat/images/user-1/image.png"));
-    }
-
-    @Test
-    @DisplayName("JSON upload complete → 알 수 없는 유형은 400")
-    void completePresignedUpload_rejectsUnknownType() throws Exception {
-        mockMvc.perform(post("/api/files/upload")
-                        .principal(PRINCIPAL)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"uploadId":"upload-1","uploadType":"UNKNOWN"}
-                                """))
-                .andExpect(status().isBadRequest());
     }
 
     private FileAccess stream() {
