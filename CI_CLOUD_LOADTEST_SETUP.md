@@ -152,7 +152,7 @@ Actions -> Backend PR Cloud Load Test -> Run workflow -> main
 - 해당 실행의 백업 JAR 삭제
 - Grafana 시작/종료 Annotation 표시
 
-Artillery 결과는 14일 보관합니다. 실패한 VU 비율이 1%를 초과하면 단계와 Workflow가
+Artillery 결과는 14일 보관합니다. 실패한 VU가 하나라도 있으면 해당 단계와 Workflow가
 실패합니다. 테스트 사용자가 DB에 생성한 데이터는 자동 삭제하지 않습니다.
 
 ## 5. Backend PR 자동 실행
@@ -183,7 +183,7 @@ Grafana -> 테스트 시각 -> github-actions Annotation
 | --- | --- |
 | `build` | Java build 또는 Maven 의존성 문제 |
 | `deploy` | Artifact, SSH, JAR 경로, sudo, 서비스 시작 또는 Health Check 문제 |
-| `load_test` | 1% 초과 VU 실패, Chromium/Artillery 또는 애플리케이션 문제 |
+| `load_test` | VU 실패 발생, Chromium/Artillery 또는 애플리케이션 문제 |
 | `rollback` | 기존 JAR 복구 또는 서비스 재시작 문제. 즉시 수동 확인 필요 |
 
 ## 7. 수동 복구
